@@ -11,6 +11,7 @@ export const state = {
   receivables: [],
   hasRestorePoint: false,
   storageError: null,
+  lock: null, // password hash record (never part of backups)
 };
 
 const listeners = new Set();
@@ -45,6 +46,7 @@ export async function load() {
     state.months = Object.fromEntries(data.months.map((m) => [m.id, m]));
     state.transactions = data.transactions;
     state.hasRestorePoint = !!kvMap.restorePoint;
+    state.lock = kvMap.lock || null;
     state.storageError = null;
   } catch (e) {
     console.error(e);
@@ -202,6 +204,7 @@ export async function restoreFrom(raw) {
       { key: 'settings', value: data.settings },
       { key: 'receivables', value: data.receivables },
       { key: 'restorePoint', value: restorePoint },
+      ...lockKv(),
     ],
     months: data.months,
     transactions: data.transactions,
@@ -216,12 +219,26 @@ export async function undoRestore() {
   if (!res.ok) throw new Error('No previous data to go back to.');
   res.data = migrateData(res.data).data;
   await db.replaceAll({
-    kv: [{ key: 'settings', value: res.data.settings }, { key: 'receivables', value: res.data.receivables }],
+    kv: [{ key: 'settings', value: res.data.settings }, { key: 'receivables', value: res.data.receivables }, ...lockKv()],
     months: res.data.months,
     transactions: res.data.transactions,
   });
   await load();
   emit();
+}
+
+// ---------- password ----------
+const lockKv = () => (state.lock ? [{ key: 'lock', value: state.lock }] : []);
+
+export async function saveLock(lock) {
+  await db.batch([{ store: 'kv', value: { key: 'lock', value: lock } }]);
+  state.lock = lock;
+}
+
+/** Forgotten password: wipe everything on this device (a backup can be restored afterwards). */
+export async function eraseAll() {
+  await db.replaceAll({ kv: [], months: [], transactions: [] });
+  await load();
 }
 
 export function markBackedUp() {

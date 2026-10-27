@@ -12,6 +12,7 @@ import { renderSummary } from './views/summary.js';
 import { renderSettings, importBackupFile } from './views/settings.js';
 import { openTxSheet } from './views/txsheet.js';
 import { addPlanItem } from './views/plan.js';
+import { lockGate } from './views/lockscreen.js';
 
 const TABS = [
   { key: 'budget', label: 'Budget', title: 'Budget', render: renderBudget },
@@ -85,7 +86,22 @@ function transitionFor(r) {
   return null;
 }
 
+let locked = true; // nothing is rendered until the password is entered
+const LOCK_AFTER_MS = 60 * 1000; // re-lock after a minute in the background
+let hiddenAt = null;
+
+async function lockNow() {
+  locked = true;
+  closeSheet();
+  app.innerHTML = '';
+  last = null;
+  await lockGate();
+  locked = false;
+  await render();
+}
+
 export async function render() {
+  if (locked) return;
   const r = parseRoute();
   if (r.name === 'month' && !state.months[r.id]) {
     try { await ensureMonth(r.id); } catch { /* error toast shown by store */ }
@@ -157,11 +173,20 @@ setWriteErrorHandler((err) => toast(`Couldn’t save: ${err.message || 'storage 
 // ---------- boot ----------
 (async function boot() {
   await load();
+  app.innerHTML = '';
+  if (!state.storageError) await lockGate();
+  locked = false;
   await render();
   navigator.storage?.persist?.().catch(() => {});
-  // Re-render when the app comes back to the foreground (date may have changed).
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !isSheetOpen()) render(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (!locked && hiddenAt && Date.now() - hiddenAt > LOCK_AFTER_MS) { hiddenAt = null; lockNow(); return; }
+    hiddenAt = null;
+    if (!locked && !isSheetOpen()) render(); // the date may have changed
+  });
 })();
+
+registerActions({ 'lock-now': () => lockNow() });
 
 // ---------- service worker (offline + updates) ----------
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {

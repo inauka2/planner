@@ -59,3 +59,20 @@ test('service worker precaches every app file', () => {
   ];
   for (const f of files) assert.ok(sw.includes(`'${f}'`), `sw.js is missing ${f}`);
 });
+
+test('password lock: correct password unlocks, others do not, hash is salted', async () => {
+  const { createLock, verifyLock } = await import('../js/lock.js');
+  const a = await createLock('secret-pass');
+  const b = await createLock('secret-pass');
+  assert.notEqual(a.hash, b.hash, 'random salt → different hashes');
+  assert.equal(JSON.stringify(a).includes('secret-pass'), false, 'password is never stored');
+  assert.equal(await verifyLock(a, 'secret-pass'), true);
+  assert.equal(await verifyLock(a, 'Secret-pass'), false);
+  assert.equal(await verifyLock(a, ''), false);
+  assert.equal(await verifyLock(null, 'secret-pass'), false);
+});
+
+test('backups never contain the password hash', () => {
+  const state = { ...sample(), lock: { salt: 'x', hash: 'y' } };
+  assert.equal('lock' in makeBackup(state), false);
+});

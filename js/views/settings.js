@@ -6,8 +6,9 @@ import { ACCOUNT_KINDS } from '../defaults.js';
 import { icon } from '../icons.js';
 import { esc, registerActions, openSheet, fieldError, toast, confirmDialog, segmented, currencySeg } from '../ui.js';
 import { localDateParts } from '../ledger.js';
+import { changePasswordSheet } from './lockscreen.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 let persisted = null;
 
 export function renderSettings() {
@@ -31,6 +32,12 @@ export function renderSettings() {
           <span class="row-end">${icon('chev-right')}</span>
         </li>`).join('')}
         <li class="row tappable" data-act="acc-add"><span class="accent">${icon('plus', 'ic-xs')} Add account</span></li>
+      </ul>
+
+      <p class="section-label"><span>Security</span></p>
+      <ul class="list card flush">
+        <li class="row tappable" data-act="pw-change"><div class="row-main"><span class="row-title">Change password</span></div><span class="row-end">${icon('chev-right')}</span></li>
+        <li class="row tappable" data-act="lock-now"><div class="row-main"><span class="row-title">Lock now</span><span class="row-sub">Planner also locks after 1 minute in the background</span></div><span class="row-end">${icon('lock')}</span></li>
       </ul>
 
       <p class="section-label"><span>Exchange rate</span></p>
@@ -87,6 +94,7 @@ function accountForm(a) {
 }
 
 registerActions({
+  'pw-change': () => changePasswordSheet(),
   'acc-add': () => openSheet({
     title: 'New account',
     body: accountForm(null),

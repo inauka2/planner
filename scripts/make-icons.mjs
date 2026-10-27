@@ -1,10 +1,10 @@
 // Generates the app icons (PNG + SVG) with no dependencies: `npm run icons`
-// Design: a yellow calendar outline with a dot grid on a black background.
+// Design: a green calendar outline with a dot grid on a black background.
 import { deflateSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
 
 const BG = [0, 0, 0];
-const FG = [242, 201, 76]; // #F2C94C
+const FG = [48, 209, 88]; // #30D158
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
   let c = n;
@@ -79,7 +79,7 @@ writeFileSync(out('icon-512.png'), render(512));
 writeFileSync(out('icon-maskable-512.png'), render(512, 0.78));
 writeFileSync(out('icon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
 <rect width="100" height="100" rx="22" fill="#000"/>
-<g fill="#F2C94C"><path fill-rule="evenodd" d="M29 27h42a7 7 0 0 1 7 7v38a7 7 0 0 1-7 7H29a7 7 0 0 1-7-7V34a7 7 0 0 1 7-7zm-2.5 10v35a2.5 2.5 0 0 0 2.5 2.5h42a2.5 2.5 0 0 0 2.5-2.5V37z"/>
+<g fill="#30D158"><path fill-rule="evenodd" d="M29 27h42a7 7 0 0 1 7 7v38a7 7 0 0 1-7 7H29a7 7 0 0 1-7-7V34a7 7 0 0 1 7-7zm-2.5 10v35a2.5 2.5 0 0 0 2.5 2.5h42a2.5 2.5 0 0 0 2.5-2.5V37z"/>
 <rect x="34.5" y="18" width="5" height="14" rx="2.5"/><rect x="60.5" y="18" width="5" height="14" rx="2.5"/>
 <circle cx="37" cy="50" r="3.5"/><circle cx="50" cy="50" r="3.5"/><circle cx="63" cy="50" r="3.5"/><circle cx="37" cy="64" r="3.5"/><circle cx="50" cy="64" r="3.5"/></g></svg>
 `);

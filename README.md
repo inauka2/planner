@@ -69,6 +69,14 @@ Cloudflare Pages and Vercel (static, no framework) work the same way.
 
 **Important:** the Home Screen app and Safari keep **separate** storage on iPhone. Enter your data in the installed app. If you entered data in Safari first, use *Settings → Export backup* there, then *Restore backup* in the installed app.
 
+## Password
+
+The first time Planner opens on a device, it asks you to create a password. After that it asks for the password every time it opens, and again after 1 minute in the background. *Settings → Security* has **Change password** and **Lock now**.
+
+- The password is never written in the code or sent anywhere. Only a salted PBKDF2 hash is kept on the device, and it's never included in backups.
+- It locks the app's screens. It is not encryption of the stored data.
+- **There is no recovery.** If you forget it, choose *Forgot password?* → erase this device's data → set a new password → *Restore backup*. So keep exporting backups.
+
 ## Back up your data
 
 There is no cloud copy and no sync. Your data exists only on that phone, so back it up regularly. The app reminds you after 30 days.
