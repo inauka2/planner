@@ -1,0 +1,6 @@
+node_modules/
+.DS_Store
+# never publish personal data exported from the app
+planner-backup-*.json
+planner-*.csv
+.claude/

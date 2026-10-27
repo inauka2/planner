@@ -1,0 +1,15 @@
+{
+  "name": "monthly-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline-first personal finance & life planner (PWA). No backend, data stays on the device.",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
