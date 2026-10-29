@@ -4,23 +4,18 @@ import { state } from '../store.js';
 import { monthSummary, monthTxs, localDateParts, accountById } from '../ledger.js';
 import { formatMoney } from '../money.js';
 import { icon } from '../icons.js';
-import { esc, registerActions, emptyState, dayLabel, pairText } from '../ui.js';
+import { esc, registerActions, emptyState, dayLabel, pairText, moneyStack, shownCurrencies } from '../ui.js';
 import { openTxSheet } from './txsheet.js';
 
-function spentColumn(label, pair) {
-  return `<div>
-    <p class="eyebrow">${label}</p>
-    <p class="big sm">${formatMoney(pair.ALL, 'ALL').replace(' ALL', '')}<span class="unit">ALL</span></p>
-    <p class="sub-amt">${formatMoney(pair.EUR, 'EUR')}</p>
-  </div>`;
-}
 
 export function renderDaily(id) {
   const m = state.months[id];
   const sum = monthSummary(state, id);
   const today = localDateParts();
   const isCurrent = today.monthId === id;
-  const zero = { ALL: 0, EUR: 0 };
+  const zero = { ALL: 0, EUR: 0, USD: 0 };
+  const left = isCurrent ? sum.daily[today.date] || zero : sum.income;
+  const show = shownCurrencies(left, sum.spending);
 
   const txs = monthTxs(state, id).sort((a, b) => (b.date + b.time + (b.createdAt || '')).localeCompare(a.date + a.time + (a.createdAt || '')));
   const byDay = new Map();
@@ -32,10 +27,10 @@ export function renderDaily(id) {
   return `
     <section class="card hero">
       <div class="totals-2">
-        ${isCurrent ? spentColumn('Spent today', sum.daily[today.date] || zero) : spentColumn('Income', sum.income)}
-        ${spentColumn('Spent this month', sum.spending)}
+        ${moneyStack(isCurrent ? 'Spent today' : 'Income', left, { show })}
+        ${moneyStack('Spent this month', sum.spending, { show })}
       </div>
-      ${isCurrent && (sum.income.ALL || sum.income.EUR) ? `<div class="divider"></div>
+      ${isCurrent && (sum.income.ALL || sum.income.EUR || sum.income.USD) ? `<div class="divider"></div>
         <div class="title-row"><span class="muted small">Income received</span><span class="amount pos">${pairText(sum.income)}</span></div>` : ''}
     </section>
 

@@ -1,5 +1,5 @@
 // App bootstrap: hash router, rendering, motion, global event delegation, service worker.
-import { state, load, subscribe, ensureMonth, setWriteErrorHandler } from './store.js';
+import { state, load, subscribe, ensureMonth, setWriteErrorHandler, setSignedIn } from './store.js';
 import { isMonthId, monthLabel, localDateParts, prevMonthId, nextMonthId, canEdit, parseMonthId } from './ledger.js';
 import { icon } from './icons.js';
 import { dispatch, registerActions, toast, isSheetOpen, closeSheet, setRenderer, esc } from './ui.js';
@@ -86,11 +86,10 @@ function transitionFor(r) {
   return null;
 }
 
-let locked = true; // nothing is rendered until the password is entered
-const LOCK_AFTER_MS = 60 * 1000; // re-lock after a minute in the background
-let hiddenAt = null;
+let locked = true; // nothing is rendered until signed in
 
-async function lockNow() {
+async function logOut() {
+  await setSignedIn(false);
   locked = true;
   closeSheet();
   app.innerHTML = '';
@@ -179,14 +178,11 @@ setWriteErrorHandler((err) => toast(`Couldn’t save: ${err.message || 'storage 
   await render();
   navigator.storage?.persist?.().catch(() => {});
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { hiddenAt = Date.now(); return; }
-    if (!locked && hiddenAt && Date.now() - hiddenAt > LOCK_AFTER_MS) { hiddenAt = null; lockNow(); return; }
-    hiddenAt = null;
-    if (!locked && !isSheetOpen()) render(); // the date may have changed
+    if (!document.hidden && !locked && !isSheetOpen()) render(); // the date may have changed
   });
 })();
 
-registerActions({ 'lock-now': () => lockNow() });
+registerActions({ 'log-out': () => logOut() });
 
 // ---------- service worker (offline + updates) ----------
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {

@@ -58,7 +58,7 @@ test('expenses are counted exactly once and reduce the paying account', () => {
   tx(s, { monthId: OCT, type: 'expense', amount: 120000, accountId: 'cash_all' });
   tx(s, { monthId: OCT, type: 'expense', amount: 2550, accountId: 'cash_eur', currency: 'EUR' });
   const sum = monthSummary(s, OCT);
-  assert.deepEqual(sum.spending, { ALL: 120000, EUR: 2550 });
+  assert.deepEqual(sum.spending, { ALL: 120000, EUR: 2550, USD: 0 });
   assert.equal(sum.all.spending, 120000 + 255000); // €25.50 * 100
   assert.equal(sum.closingBalances.cash_all, 380000);
   assert.equal(sum.closingBalances.cash_eur, -2550);
@@ -71,11 +71,11 @@ test('planned expenses never count as spending', () => {
   m.plan.push({ id: 'p1', kind: 'expense', categoryId: 'necessary', description: 'Rent', amount: 3000000, currency: 'ALL', recurring: true, paid: false });
   m.plan.push({ id: 'p2', kind: 'expense', categoryId: 'subscriptions', description: 'Netflix', amount: 1299, currency: 'EUR', recurring: true, paid: true });
   const sum = monthSummary(s, OCT);
-  assert.deepEqual(sum.spending, { ALL: 0, EUR: 0 });
+  assert.deepEqual(sum.spending, { ALL: 0, EUR: 0, USD: 0 });
   assert.equal(sum.closingBalances.bank1, 1000000);
   const p = planTotals(m);
-  assert.deepEqual(p.expense, { ALL: 3000000, EUR: 1299 });
-  assert.deepEqual(p.unpaid, { ALL: 3000000, EUR: 0 });
+  assert.deepEqual(p.expense, { ALL: 3000000, EUR: 1299, USD: 0 });
+  assert.deepEqual(p.unpaid, { ALL: 3000000, EUR: 0, USD: 0 });
 });
 
 test('ATM withdrawal moves money bank → cash and is NOT spending', () => {
@@ -83,7 +83,7 @@ test('ATM withdrawal moves money bank → cash and is NOT spending', () => {
   addMonth(s, OCT, { openingBalances: { bank1: 5000000, cash_all: 0 } });
   tx(s, { monthId: OCT, type: 'transfer', amount: 1000000, accountId: 'bank1', toAccountId: 'cash_all', description: 'ATM withdrawal' });
   const sum = monthSummary(s, OCT);
-  assert.deepEqual(sum.spending, { ALL: 0, EUR: 0 });
+  assert.deepEqual(sum.spending, { ALL: 0, EUR: 0, USD: 0 });
   assert.equal(sum.closingBalances.bank1, 4000000);
   assert.equal(sum.closingBalances.cash_all, 1000000);
   assert.equal(sum.closing.ALL, sum.opening.ALL, 'total ALL unchanged by a withdrawal');
@@ -104,8 +104,8 @@ test('transfers to savings are not spending and are reported as saved', () => {
   addMonth(s, OCT, { openingBalances: { bank2: 200000 } });
   tx(s, { monthId: OCT, type: 'transfer', amount: 50000, accountId: 'bank2', toAccountId: 'savings' });
   const sum = monthSummary(s, OCT);
-  assert.deepEqual(sum.spending, { ALL: 0, EUR: 0 });
-  assert.deepEqual(sum.savings, { ALL: 0, EUR: 50000 });
+  assert.deepEqual(sum.spending, { ALL: 0, EUR: 0, USD: 0 });
+  assert.deepEqual(sum.savings, { ALL: 0, EUR: 50000, USD: 0 });
   assert.equal(sum.closingBalances.savings, 50000);
   assert.equal(sum.closing.EUR, 200000);
 });
@@ -116,9 +116,9 @@ test('currency exchange EUR → ALL keeps currencies separate', () => {
   // €100 exchanged at the bureau, received 9,650 ALL (worse than the reference rate)
   tx(s, { monthId: OCT, type: 'transfer', amount: 10000, accountId: 'cash_eur', toAccountId: 'cash_all', toAmount: 965000 });
   const sum = monthSummary(s, OCT);
-  assert.deepEqual(sum.spending, { ALL: 0, EUR: 0 });
-  assert.deepEqual(sum.closing, { ALL: 965000, EUR: 0 });
-  assert.deepEqual(sum.exchange, { ALL: 965000, EUR: -10000 });
+  assert.deepEqual(sum.spending, { ALL: 0, EUR: 0, USD: 0 });
+  assert.deepEqual(sum.closing, { ALL: 965000, EUR: 0, USD: 0 });
+  assert.deepEqual(sum.exchange, { ALL: 965000, EUR: -10000, USD: 0 });
   // per-currency equation holds
   for (const c of ['ALL', 'EUR']) {
     assert.equal(sum.closing[c], sum.opening[c] + sum.income[c] - sum.spending[c] + sum.exchange[c] + sum.adjust[c]);
@@ -165,7 +165,7 @@ test('closing → carryover without double counting', () => {
   // November activity builds on the opening; October's income is not counted again
   tx(s, { monthId: NOV, type: 'expense', amount: 1000000, accountId: 'bank1' });
   const nov = monthSummary(s, NOV);
-  assert.deepEqual(nov.income, { ALL: 0, EUR: 0 });
+  assert.deepEqual(nov.income, { ALL: 0, EUR: 0, USD: 0 });
   assert.equal(nov.spending.ALL, 1000000);
   assert.equal(nov.closingBalances.bank1, 15000000);
   assert.equal(nov.closingBalances.cash_eur, 15000);
@@ -282,7 +282,7 @@ test('new month template: default headings, recurring items copied unpaid', () =
   assert.deepEqual(missingUnfinished(s, NOV).map((p) => p.id), ['p2', 'p3'], 'unpaid one-off items can be brought over');
   nov.plan = [];
   assert.equal(missingRecurring(s, NOV).length, 1);
-  assert.deepEqual(planTotals(oct).expense, { ALL: 500000, EUR: 699 }, 'items without a price are skipped');
+  assert.deepEqual(planTotals(oct).expense, { ALL: 500000, EUR: 699, USD: 0 }, 'items without a price are skipped');
 });
 
 test('migration from v1: buy lists become Self-care items, old categories are folded', () => {
@@ -311,6 +311,8 @@ test('migration from v1: buy lists become Self-care items, old categories are fo
   assert.deepEqual(data.transactions[0].link, { kind: 'plan', monthId: OCT, itemId: 'b1' });
   assert.equal(data.transactions[0].categoryId, 'other');
   assert.equal(data.settings.accounts.some((a) => a.id === 'savings'), false, 'unused Savings account removed');
+  assert.equal(data.settings.accounts.some((a) => a.currency === 'USD'), true, 'USD account added');
+  assert.equal(data.settings.usdRate > 0, true);
   assert.equal(migrateData(data).changed, false, 'migration is idempotent');
 });
 
@@ -326,6 +328,24 @@ test('year overview finds highest and lowest spending months', () => {
   assert.equal(y.highest.id, '2026-09');
   assert.equal(y.lowest.id, OCT);
   assert.equal(y.totalAll, 500000 + 1000000 + 100000);
+});
+
+test('US dollars: separate balance, converted with their own rate, carried over on close', () => {
+  const s = freshState();
+  addMonth(s, OCT, { openingBalances: { cash_usd: 10000, cash_all: 100000 }, rate: 97, usdRate: 90 });
+  tx(s, { monthId: OCT, type: 'expense', amount: 2500, accountId: 'cash_usd' }); // $25
+  // $50 exchanged, received 4,400 ALL
+  tx(s, { monthId: OCT, type: 'transfer', amount: 5000, accountId: 'cash_usd', toAccountId: 'cash_all', toAmount: 440000 });
+  const sum = monthSummary(s, OCT);
+  assert.deepEqual(sum.spending, { ALL: 0, EUR: 0, USD: 2500 });
+  assert.deepEqual(sum.closing, { ALL: 540000, EUR: 0, USD: 2500 });
+  assert.equal(sum.all.spending, 225000, '$25 × 90 = 2,250 ALL');
+  const { closing } = close(s, OCT, {}, { EUR: 98, USD: 91 });
+  assert.equal(closing.usdRate, 91);
+  assert.equal(monthSummary(s, OCT).all.spending, 227500, 'closed month keeps its USD rate');
+  addMonth(s, NOV);
+  assert.equal(s.months[NOV].usdRate, 91);
+  assert.equal(openingInfo(s, NOV).balances.cash_usd, 2500);
 });
 
 test('random ledgers always satisfy the balance equation per currency', () => {
@@ -348,8 +368,8 @@ test('random ledgers always satisfy the balance equation per currency', () => {
     }
   }
   const sum = monthSummary(s, OCT);
-  for (const c of ['ALL', 'EUR']) {
+  for (const c of ['ALL', 'EUR', 'USD']) {
     assert.equal(sum.closing[c], sum.opening[c] + sum.income[c] - sum.spending[c] + sum.exchange[c] + sum.adjust[c], c);
   }
-  assert.equal(sum.all.closing, combinedAll(sum.closing, 97.3));
+  assert.equal(sum.all.closing, combinedAll(sum.closing, sum.rates));
 });

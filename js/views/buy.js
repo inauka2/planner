@@ -5,10 +5,10 @@ import { monthSummary, planTotals, sourceMonthId, monthLabel } from '../ledger.j
 import { formatMoney } from '../money.js';
 import { SELFCARE_ID, missingRecurring, missingUnfinished } from '../defaults.js';
 import { icon, categoryIcon } from '../icons.js';
-import { esc, registerActions, openSheet, fieldError, toast, checkbox, emptyState, pairText, confirmDialog } from '../ui.js';
+import { esc, registerActions, openSheet, fieldError, toast, checkbox, emptyState, pairText, confirmDialog, moneyStack, shownCurrencies } from '../ui.js';
 import { PRIORITY, doneWord, findCategory } from './plan.js';
 
-const zero = () => ({ ALL: 0, EUR: 0 });
+const zero = () => ({ ALL: 0, EUR: 0, USD: 0 });
 
 function totalsOf(items) {
   const planned = zero();
@@ -22,7 +22,7 @@ function totalsOf(items) {
 }
 
 const expenseItems = (m) => m.plan.filter((p) => p.kind !== 'income');
-const amountText = (pair) => (pair.ALL || pair.EUR ? pairText(pair) : '');
+const amountText = (pair) => (pair.ALL || pair.EUR || pair.USD ? pairText(pair) : '');
 
 export function renderBuy(id, path = []) {
   const m = state.months[id];
@@ -47,11 +47,10 @@ function renderRoot(id, m) {
     <h1 class="large-title">To Buy</h1>
     <section class="card hero">
       <div class="totals-2">
-        <div><p class="eyebrow">Planned · Lek</p><p class="big sm">${formatMoney(t.planned.ALL, 'ALL').replace(' ALL', '')}<span class="unit">ALL</span></p></div>
-        <div><p class="eyebrow">Planned · Euro</p><p class="big sm">${formatMoney(t.planned.EUR, 'EUR')}</p></div>
+        ${moneyStack('Planned', t.planned, { show: shownCurrencies(t.planned, t.left) })}
+        ${moneyStack('Still to buy or pay', t.left, { show: shownCurrencies(t.planned, t.left) })}
       </div>
-      <div class="divider"></div>
-      <div class="title-row"><span class="muted small">${t.open} of ${t.count} left to buy or pay</span><span class="amount dim">${amountText(t.left)}</span></div>
+      ${t.count ? `<p class="hint">${t.open} of ${t.count} item${t.count > 1 ? 's' : ''} left</p>` : ''}
     </section>
 
     ${recurring.length || unfinished.length ? `<div class="stack">
@@ -129,7 +128,7 @@ function itemList(id, items) {
   return `<ul class="list card flush">${sorted.map((p) => {
     const meta = [];
     if (p.recurring) meta.push(`${icon('repeat', 'ic-xs')} Monthly`);
-    if (p.priority) meta.push(`${PRIORITY[p.priority]} priority`);
+    if (p.priority) meta.push(`<span class="tag prio-${p.priority}">${PRIORITY[p.priority]}</span>`);
     if (p.paid) meta.push(p.txId ? `${doneWord(p)} · recorded` : doneWord(p));
     return `<li class="row has-check">
       ${checkbox(p.paid, 'plan-tick', `data-month="${id}" data-id="${esc(p.id)}" ${closed ? 'disabled' : ''}`, doneWord(p), { id: p.id })}
@@ -147,7 +146,7 @@ function nameSheet({ title, value, placeholder, onSave, onDelete, deleteLabel })
   openSheet({
     title,
     body: `<label class="field"><span class="label">Name</span><input class="input" name="label" maxlength="40" value="${esc(value)}" placeholder="${esc(placeholder)}" autofocus></label>
-      ${onDelete ? `<button type="button" class="btn btn-danger-ghost btn-block" data-act="name-delete">${esc(deleteLabel)}</button>` : ''}`,
+      ${onDelete ? `<button type="button" class="btn btn-danger-ghost" data-act="name-delete">${esc(deleteLabel)}</button>` : ''}`,
     actions: onDelete ? { 'name-delete': onDelete } : {},
     onSubmit: async (form) => {
       const name = form.label.value.trim();

@@ -123,7 +123,7 @@ registerActions({
     if (!it) return;
     openSheet({
       title: 'Task',
-      body: taskForm(it) + '<button type="button" class="btn btn-danger-ghost btn-block" data-act="todo-delete">Delete task</button>',
+      body: taskForm(it) + '<button type="button" class="btn btn-danger-ghost" data-act="todo-delete">Delete task</button>',
       actions: {
         'todo-delete': async () => {
           await updateMonth(id, (mm) => { const l = findList(mm, list); l.items = l.items.filter((x) => x.id !== it.id); });
@@ -145,7 +145,7 @@ registerActions({
     const { month: id, list } = el.dataset;
     const l = findList(state.months[id], list);
     nameSheet('List', l.name, (name) => updateMonth(id, (mm) => { findList(mm, list).name = name; }), {
-      body: `<button type="button" class="btn btn-danger-ghost btn-block" data-act="todo-list-delete">Delete list</button>`,
+      body: `<button type="button" class="btn btn-danger-ghost" data-act="todo-list-delete">Delete list</button>`,
       actions: {
         'todo-list-delete': async () => {
           if (l.items.length) {

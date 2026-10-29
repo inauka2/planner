@@ -1,6 +1,6 @@
 // Backup (JSON), restore validation and CSV export. Nothing is ever uploaded:
 // files are handed to the iOS share sheet / browser download only.
-import { TX_TYPES, isMonthId, getRate, monthLabel } from './ledger.js';
+import { TX_TYPES, isMonthId, getRates, monthLabel } from './ledger.js';
 import { isCurrency, toAllCents, centsToInput } from './money.js';
 import { SCHEMA_VERSION, normalizeSettings } from './defaults.js';
 
@@ -74,13 +74,14 @@ export function toCsv(state, monthId = null) {
   const rows = [[
     'Date', 'Time', 'Month', 'Type', 'Description', 'Amount', 'Currency', 'Account',
     'To account', 'Amount received', 'Received currency', 'Category',
-    'Rate (1 EUR = x ALL)', 'ALL equivalent',
+    'Rate to ALL', 'ALL equivalent',
   ]];
   const txs = state.transactions
     .filter((t) => !monthId || t.monthId === monthId)
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   for (const t of txs) {
-    const rate = getRate(state, t.monthId);
+    const rates = getRates(state, t.monthId);
+    const rate = t.currency === 'ALL' ? 1 : rates[t.currency];
     const signed = t.type === 'expense' ? -t.amount : t.amount;
     rows.push([
       t.date, t.time, monthLabel(t.monthId), TYPE_LABEL[t.type], t.description,
@@ -90,7 +91,7 @@ export function toCsv(state, monthId = null) {
       t.type === 'transfer' ? t.toCurrency : '',
       t.type === 'expense' ? catName(t) : '',
       rate,
-      t.type === 'transfer' ? '' : centsToInput(toAllCents(signed, t.currency, rate)),
+      t.type === 'transfer' ? '' : centsToInput(toAllCents(signed, t.currency, rates)),
     ]);
   }
   return '﻿' + rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';

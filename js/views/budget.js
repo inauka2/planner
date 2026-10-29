@@ -2,10 +2,10 @@
 // expected income, and planned vs actual spending.
 import { state, updateMonth, saveTx, saveReceivable, deleteReceivable, uid } from '../store.js';
 import { monthSummary, planTotals, canEdit, sourceMonthId, monthLabel, monthTxs, txEffects } from '../ledger.js';
-import { parseAmount, formatMoney, centsToInput } from '../money.js';
+import { parseAmount, formatMoney, centsToInput, CURRENCIES } from '../money.js';
 import { icon } from '../icons.js';
 import {
-  esc, registerActions, openSheet, fieldError, toast, checkbox, currencySeg, confirmDialog, segmented,
+  esc, registerActions, openSheet, fieldError, toast, checkbox, currencySeg, confirmDialog, segmented, moneyStack, shownCurrencies, pairText,
 } from '../ui.js';
 import { openTxSheet, defaultAccount, defaultDateTime } from './txsheet.js';
 import { doneWord } from './plan.js';
@@ -13,7 +13,7 @@ import { doneWord } from './plan.js';
 /** "158,650" + unit, for the big totals. */
 function bigAmount(cents, cur) {
   const s = formatMoney(cents, cur);
-  return cur === 'EUR' ? s : `${s.replace(' ALL', '')}<span class="unit">ALL</span>`;
+  return cur === 'ALL' ? `${s.replace(' ALL', '')}<span class="unit">ALL</span>` : s;
 }
 
 export function renderBudget(id) {
@@ -42,6 +42,7 @@ function balancesCard(id, sum, closed) {
     <div class="totals-2">
       <div><p class="eyebrow">Lek</p><p class="big ${sum.closing.ALL < 0 ? 'neg' : ''}">${bigAmount(sum.closing.ALL, 'ALL')}</p></div>
       <div><p class="eyebrow">Euro</p><p class="big ${sum.closing.EUR < 0 ? 'neg' : ''}">${bigAmount(sum.closing.EUR, 'EUR')}</p></div>
+      ${sum.closing.USD ? `<div><p class="eyebrow">Dollar</p><p class="big ${sum.closing.USD < 0 ? 'neg' : ''}">${bigAmount(sum.closing.USD, 'USD')}</p></div>` : ''}
     </div>
     <div class="divider"></div>
     <ul class="list">
@@ -152,15 +153,14 @@ registerActions({
 
 // ---------- two columns: owed to me · expected income ----------
 function miniTotal(pair) {
-  if (!pair.ALL && !pair.EUR) return '';
-  const all = pair.ALL ? formatMoney(pair.ALL, 'ALL') : '';
-  const eur = pair.EUR ? formatMoney(pair.EUR, 'EUR') : '';
-  return `<p class="mini-total">${all || eur}${all && eur ? `<span class="eur">${eur}</span>` : ''}</p>`;
+  const parts = CURRENCIES.filter((c) => pair[c]).map((c) => formatMoney(pair[c], c));
+  if (!parts.length) return '';
+  return `<p class="mini-total">${parts[0]}${parts.slice(1).map((p) => `<span class="eur">${p}</span>`).join('')}</p>`;
 }
 
 function owedCard(id) {
   const open = state.receivables.filter((r) => !r.received);
-  const total = { ALL: 0, EUR: 0 };
+  const total = { ALL: 0, EUR: 0, USD: 0 };
   open.forEach((r) => { total[r.currency] += r.amount; });
   return `<section class="card">
     <div class="mini-head"><h3>Owed to me</h3></div>
@@ -177,7 +177,7 @@ function owedCard(id) {
 
 function incomeCard(id, m, closed) {
   const items = m.plan.filter((p) => p.kind === 'income');
-  const total = { ALL: 0, EUR: 0 };
+  const total = { ALL: 0, EUR: 0, USD: 0 };
   items.forEach((p) => { total[p.currency] += p.amount || 0; });
   return `<section class="card">
     <div class="mini-head"><h3>Expected income</h3></div>
@@ -196,18 +196,18 @@ function incomeCard(id, m, closed) {
 // ---------- planned vs actual ----------
 function plannedVsActual(id, m, sum) {
   const plan = planTotals(m);
-  const rows = ['ALL', 'EUR'].filter((c) => plan.expense[c] || sum.spending[c] || c === 'ALL');
+  const show = shownCurrencies(plan.expense, sum.spending);
+  const over = plan.expense.ALL > 0 && sum.spending.ALL > plan.expense.ALL;
+  const nothingLeft = !plan.unpaid.ALL && !plan.unpaid.EUR && !plan.unpaid.USD;
   return `<section class="card">
     <div class="card-head"><h2>Planned vs actual</h2><a class="link-btn" href="#/m/${id}/buy">See plan</a></div>
-    <table class="table">
-      <thead><tr><th></th><th>Planned</th><th>Spent</th></tr></thead>
-      <tbody>${rows.map((c) => `<tr>
-        <th scope="row">${c === 'ALL' ? 'Lek' : 'Euro'}</th>
-        <td class="muted">${formatMoney(plan.expense[c], c)}</td>
-        <td class="${plan.expense[c] && sum.spending[c] > plan.expense[c] ? 'warn' : ''}">${formatMoney(sum.spending[c], c)}</td></tr>`).join('')}
-      </tbody>
-    </table>
-    <p class="hint">Still to pay ${['ALL', 'EUR'].filter((c) => plan.unpaid[c] || c === 'ALL').map((c) => formatMoney(plan.unpaid[c], c)).join(' · ')}. Only recorded expenses count as spent.</p>
+    <div class="totals-2">
+      ${moneyStack('Planned', plan.expense, { show })}
+      ${moneyStack('Spent', sum.spending, { show, neg: over })}
+    </div>
+    <div class="divider"></div>
+    <div class="title-row"><span class="muted small">Still to pay</span><span class="amount ${nothingLeft ? 'dim' : ''}">${pairText(plan.unpaid, { always: true })}</span></div>
+    <p class="hint">Only recorded expenses count as spent.</p>
   </section>`;
 }
 
@@ -247,8 +247,8 @@ registerActions({
     if (!r) return;
     openSheet({
       title: 'Owed to me',
-      body: owedForm(r) + '<button type="button" class="btn btn-danger-ghost btn-block" data-act="owed-delete">Delete</button>',
-      footer: `<button type="button" class="btn btn-tinted btn-block" data-act="owed-receive">Mark as received…</button>`,
+      body: owedForm(r) + '<button type="button" class="btn btn-danger-ghost" data-act="owed-delete">Delete</button>',
+      footer: `<button type="button" class="btn btn-tinted" data-act="owed-receive">Mark received</button>`,
       actions: {
         'owed-receive': () => openTxSheet({
           monthId, type: 'income',

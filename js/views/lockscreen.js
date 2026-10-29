@@ -1,5 +1,5 @@
 // Full-screen password gate shown before any data is rendered.
-import { state, saveLock, eraseAll } from '../store.js';
+import { state, saveLock, eraseAll, setSignedIn } from '../store.js';
 import { createLock, verifyLock, MIN_LENGTH } from '../lock.js';
 import { openSheet, fieldError, toast } from '../ui.js';
 
@@ -24,13 +24,14 @@ function hide() {
 
 /** Resolve once the user is allowed in. Creates a password first if none exists. */
 export function lockGate() {
+  if (state.lock && state.signedIn) return Promise.resolve();
   return new Promise((resolve) => (state.lock ? unlockScreen(resolve) : setupScreen(resolve)));
 }
 
 function setupScreen(done) {
   screen(`
     <h1>Create a password</h1>
-    <p class="hint center">You’ll need it every time you open Planner. It is saved only on this device.</p>
+    <p class="hint center">You’ll stay signed in on this device until you log out. The password is saved only here.</p>
     <form class="lock-form" novalidate>
       <input class="input" type="password" name="pw" placeholder="Password" autocomplete="new-password" autofocus>
       <input class="input" type="password" name="pw2" placeholder="Repeat password" autocomplete="new-password">
@@ -48,6 +49,7 @@ function setupScreen(done) {
     if (pw !== form.pw2.value) return showErr(err, 'The passwords don’t match');
     try {
       await saveLock(await createLock(pw));
+      await setSignedIn(true);
     } catch (ex) {
       return showErr(err, `Couldn’t save the password: ${ex.message}`);
     }
@@ -59,11 +61,11 @@ function setupScreen(done) {
 function unlockScreen(done) {
   screen(`
     <h1>Planner</h1>
-    <p class="hint center">Enter your password</p>
+    <p class="hint center">Sign in with your password</p>
     <form class="lock-form" novalidate>
       <input class="input" type="password" name="pw" placeholder="Password" autocomplete="current-password" autofocus>
       <p class="field-error" data-err hidden></p>
-      <button class="btn btn-primary btn-block" type="submit">Unlock</button>
+      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
     </form>
     <button class="link-btn" type="button" data-forgot>Forgot password?</button>`);
   const form = root().querySelector('form');
@@ -80,6 +82,7 @@ function unlockScreen(done) {
     busy = false;
     if (ok) {
       failures = 0;
+      await setSignedIn(true).catch(() => {});
       hide();
       done();
       return;

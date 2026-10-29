@@ -54,7 +54,7 @@ function itemForm(m, p, { kind, categoryId, listId, pickCategory }) {
       <label class="field" data-sub ${cat?.lists?.length ? '' : 'hidden'}><span class="label">Subcategory</span>
         <select class="select" name="list">${subOptions(cat, p?.listId ?? listId)}</select></label>` : ''}
     ${kind === 'expense' ? `<div class="field" data-prio ${bill ? 'hidden' : ''}><span class="label">Priority <span class="optional">optional</span></span>
-      ${segmented('priority', [['', 'None'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']], p?.priority ?? '', { small: true })}</div>` : ''}
+      ${segmented('priority', [['', 'None'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']], p?.priority ?? '', { small: true, cls: 'seg-prio' })}</div>` : ''}
     ${switchRow('recurring', recurring, 'Repeats every month', `Copied to new months as not ${kind === 'income' ? 'received' : bill ? 'paid' : 'bought'}`)}`;
 }
 
@@ -126,8 +126,8 @@ export function openPlanItem(id, itemId) {
     title: p.kind === 'income' ? 'Expected income' : p.description,
     body: itemForm(m, p, { kind: p.kind, pickCategory: p.kind === 'expense' }) + `
       ${p.txId ? `<p class="hint">${icon('check', 'ic-xs')} Recorded in Daily.</p>` : ''}
-      <button type="button" class="btn btn-danger-ghost btn-block" data-act="plan-delete">Remove from ${monthLabel(id)}</button>`,
-    footer: canRecord ? `<button type="button" class="btn btn-tinted btn-block" data-act="plan-record">Record ${p.kind === 'income' ? 'income' : 'expense'}…</button>` : '',
+      <button type="button" class="btn btn-danger-ghost" data-act="plan-delete">Remove from ${monthLabel(id)}</button>`,
+    footer: canRecord ? `<button type="button" class="btn btn-tinted" data-act="plan-record">${p.kind === 'income' ? 'Record income' : 'Record expense'}</button>` : '',
     onOpen: (form) => wireCategorySelect(form, m),
     actions: {
       'plan-record': () => recordPlan(id, p),

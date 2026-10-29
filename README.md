@@ -11,7 +11,7 @@ An installable, offline-first web app (PWA) for iPhone. Dark mode, no account, n
   - **To Do:** checklists.
   - **Summary:** money flow, spending by category, the year at a glance, and month closing.
 - The green **+** next to the tab bar always adds the right thing for the page you're on.
-- **Currencies:** ALL and EUR are kept separate. The exchange rate (Settings) is only used for the "≈ ALL" figures in Summary and on the month cards.
+- **Currencies:** ALL, EUR and USD are kept separate (one currency per account; a "Cash USD" account is included). The exchange rates (Settings: 1 EUR = x ALL, 1 USD = x ALL) are only used for the "≈ ALL" figures in Summary and on the month cards, and are saved with each closed month.
 
 ## Tech
 
@@ -71,7 +71,7 @@ Cloudflare Pages and Vercel (static, no framework) work the same way.
 
 ## Password
 
-The first time Planner opens on a device, it asks you to create a password. After that it asks for the password every time it opens, and again after 1 minute in the background. *Settings → Security* has **Change password** and **Lock now**.
+The first time Planner opens on a device, it asks you to create a password. You then **stay signed in on that device** until you choose *Settings → Security → Log out*. After logging out, the password is needed to open Planner again. *Change password* is in the same place.
 
 - The password is never written in the code or sent anywhere. Only a salted PBKDF2 hash is kept on the device, and it's never included in backups.
 - It locks the app's screens. It is not encryption of the stored data.

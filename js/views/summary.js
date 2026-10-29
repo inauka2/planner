@@ -3,7 +3,7 @@
 import { state, closeMonth, reopenMonth } from '../store.js';
 import {
   monthSummary, yearOverview, canClose, canReopen, monthLabel, parseMonthId,
-  MONTH_NAMES, getRate, sourceMonthId,
+  MONTH_NAMES, getRates, sourceMonthId,
 } from '../ledger.js';
 import { parseAmount, parseRate, formatMoney, formatRate, centsToInput, combinedAll } from '../money.js';
 import { toCsv, saveFile } from '../backup.js';
@@ -13,21 +13,21 @@ import { esc, registerActions, openSheet, fieldError, toast, pairText, confirmDi
 export function renderSummary(id) {
   const m = state.months[id];
   const s = monthSummary(state, id);
-  const rate = s.rate;
+  const rates = s.rates;
   const closed = !!m.closing;
+  const curs = ['ALL', 'EUR', ...(['opening', 'income', 'spending', 'exchange', 'adjust', 'closing'].some((k) => s[k].USD) ? ['USD'] : [])];
   const { year } = parseMonthId(id);
   const yo = yearOverview(state, year);
 
   const line = (label, pair, cls = '', prefix = '') => `<tr class="${cls}">
       <th scope="row">${label}</th>
-      <td>${prefix}${formatMoney(pair.ALL, 'ALL')}</td>
-      <td>${prefix}${formatMoney(pair.EUR, 'EUR')}</td>
+      ${curs.map((c) => `<td>${prefix}${formatMoney(pair[c], c)}</td>`).join('')}
     </tr>`;
-  const hasExchange = s.exchange.ALL || s.exchange.EUR;
-  const hasAdjust = s.adjust.ALL || s.adjust.EUR;
+  const hasExchange = curs.some((c) => s.exchange[c]);
+  const hasAdjust = curs.some((c) => s.adjust[c]);
 
   const cats = Object.entries(s.byCategory)
-    .map(([cid, pair]) => ({ name: cid ? m.categories.find((c) => c.id === cid)?.name ?? 'Other' : 'Not categorised', pair, all: combinedAll(pair, rate) }))
+    .map(([cid, pair]) => ({ name: cid ? m.categories.find((c) => c.id === cid)?.name ?? 'Other' : 'Not categorised', pair, all: combinedAll(pair, rates) }))
     .sort((a, b) => b.all - a.all);
   const maxCat = Math.max(1, ...cats.map((c) => c.all));
 
@@ -56,7 +56,7 @@ export function renderSummary(id) {
     <section class="card">
       <div class="card-head"><h2>Money flow</h2></div>
       <table class="table">
-        <thead><tr><th></th><th>Lek</th><th>Euro</th></tr></thead>
+        <thead><tr><th></th>${curs.map((c) => `<th>${c}</th>`).join('')}</tr></thead>
         <tbody>
           ${line('Opening', s.opening, 'strong')}
           ${line('Income', s.income, '', '+')}
@@ -85,7 +85,7 @@ export function renderSummary(id) {
         return `<li class="${x.id === id ? 'current' : ''}"><div class="bar-label"><span>${MONTH_NAMES[i].slice(0, 3)} ${tag}</span><span>≈ ${formatMoney(x.spendingAll, 'ALL')}</span></div>
           <div class="bar"><span style="width:${Math.max(2, Math.round((x.spendingAll / maxMonth) * 100))}%"></span></div></li>`;
       }).join('')}</ul>
-      <p class="hint">Spending in ≈ ALL, each month at its own rate (now 1 EUR = ${formatRate(rate)} ALL). Year ≈ ${formatMoney(yo.totalAll, 'ALL')}.</p>
+      <p class="hint">Spending in ≈ ALL, each month at its own rate (now 1 EUR = ${formatRate(rates.EUR)} ALL, 1 USD = ${formatRate(rates.USD)} ALL). Year ≈ ${formatMoney(yo.totalAll, 'ALL')}.</p>
     </section>
 
     <button class="text-btn" data-act="csv-month" data-month="${id}">${icon('download')} Export ${MONTH_NAMES[parseMonthId(id).month - 1]} as CSV</button>
@@ -104,13 +104,17 @@ registerActions({
       body: `<p class="hint">Check each balance against your bank app and wallet. If one differs, type the real amount — a correction is recorded so everything adds up.</p>
         ${accs.map((a) => `<label class="field field-inline"><span class="label">${esc(a.name)} <span class="cur-tag">${a.currency}</span></span>
           <input class="input input-right" name="cb_${esc(a.id)}" inputmode="decimal" value="${centsToInput(s.closingBalances[a.id] || 0)}"></label>`).join('')}
-        <label class="field field-inline"><span class="label">Rate: 1 EUR = ? ALL</span>
-          <input class="input input-right" name="rate" inputmode="decimal" value="${formatRate(getRate(state, id))}"></label>
-        <p class="hint">The rate is saved with this month so its reports never change later.</p>`,
+        <label class="field field-inline"><span class="label">1 EUR = ? ALL</span>
+          <input class="input input-right" name="rate" inputmode="decimal" value="${formatRate(getRates(state, id).EUR)}"></label>
+        <label class="field field-inline"><span class="label">1 USD = ? ALL</span>
+          <input class="input input-right" name="usdRate" inputmode="decimal" value="${formatRate(getRates(state, id).USD)}"></label>
+        <p class="hint">The rates are saved with this month so its reports never change later.</p>`,
       submitLabel: 'Confirm & close month',
       onSubmit: async (form) => {
         const r = parseRate(form.rate.value);
         if (!r.ok) return fieldError(form, 'rate', r.error);
+        const u = parseRate(form.usdRate.value);
+        if (!u.ok) return fieldError(form, 'usdRate', u.error);
         const confirmed = {};
         let corrections = 0;
         for (const a of accs) {
@@ -119,7 +123,7 @@ registerActions({
           confirmed[a.id] = p.cents;
           if (p.cents !== (s.closingBalances[a.id] || 0)) corrections++;
         }
-        await closeMonth(id, confirmed, r.rate);
+        await closeMonth(id, confirmed, { EUR: r.rate, USD: u.rate });
         toast(`${monthLabel(id)} closed${corrections ? ` with ${corrections} correction${corrections > 1 ? 's' : ''}` : ''}`);
       },
     });

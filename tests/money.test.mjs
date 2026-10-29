@@ -46,6 +46,16 @@ test('currency conversion EUR → ALL uses the given rate and rounds to the cent
   assert.throws(() => toAllCents(100, 'USD', 97));
 });
 
+test('USD support: parse, format, convert via ALL', () => {
+  assert.deepEqual(parseAmount('$12.50'), { ok: true, cents: 1250 });
+  assert.equal(formatMoney(1250, 'USD'), '$12.50');
+  const rates = { EUR: 97, USD: 90 };
+  assert.equal(toAllCents(1000, 'USD', rates), 90000);
+  assert.equal(convertCents(1000, 'USD', 'EUR', rates), 928); // $10 = 900 ALL = €9.28
+  assert.equal(combinedAll({ ALL: 100, EUR: 100, USD: 100 }, rates), 100 + 9700 + 9000);
+  assert.throws(() => toAllCents(100, 'USD', 97), 'a bare number is only the EUR rate');
+});
+
 test('combinedAll never adds raw EUR to ALL', () => {
   // 10,000 ALL + €100 at 97 = 10,000 + 9,700 = 19,700 ALL (not 10,100)
   assert.equal(combinedAll({ ALL: 1000000, EUR: 10000 }, 97), 1970000);

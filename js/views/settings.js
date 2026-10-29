@@ -1,14 +1,14 @@
 // Settings — accounts, default exchange rate, backup / restore, CSV, install help.
-import { state, saveSettings, setRate, uid, backupObject, restoreFrom, undoRestore, markBackedUp } from '../store.js';
+import { state, saveSettings, setRates, uid, backupObject, restoreFrom, undoRestore, markBackedUp } from '../store.js';
 import { parseRate, formatRate } from '../money.js';
 import { validateBackup, toCsv, saveFile } from '../backup.js';
 import { ACCOUNT_KINDS } from '../defaults.js';
 import { icon } from '../icons.js';
-import { esc, registerActions, openSheet, fieldError, toast, confirmDialog, segmented, currencySeg } from '../ui.js';
+import { esc, registerActions, actions, openSheet, fieldError, toast, confirmDialog, segmented, currencySeg } from '../ui.js';
 import { localDateParts } from '../ledger.js';
 import { changePasswordSheet } from './lockscreen.js';
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 let persisted = null;
 
 export function renderSettings() {
@@ -37,13 +37,13 @@ export function renderSettings() {
       <p class="section-label"><span>Security</span></p>
       <ul class="list card flush">
         <li class="row tappable" data-act="pw-change"><div class="row-main"><span class="row-title">Change password</span></div><span class="row-end">${icon('chev-right')}</span></li>
-        <li class="row tappable" data-act="lock-now"><div class="row-main"><span class="row-title">Lock now</span><span class="row-sub">Planner also locks after 1 minute in the background</span></div><span class="row-end">${icon('lock')}</span></li>
+        <li class="row tappable" data-act="logout-ask"><div class="row-main"><span class="row-title warn">Log out</span><span class="row-sub">You stay signed in on this device until you log out</span></div></li>
       </ul>
 
       <p class="section-label"><span>Exchange rate</span></p>
       <ul class="list card flush">
         <li class="row tappable" data-act="defrate-edit">
-          <div class="row-main"><span class="row-title">1 EUR = ${formatRate(s.defaultRate)} ALL</span><span class="row-sub">Used for “≈ ALL” figures in Summary</span></div>
+          <div class="row-main"><span class="row-title">1 EUR = ${formatRate(s.defaultRate)} ALL</span><span class="row-sub">1 USD = ${formatRate(s.usdRate)} ALL · used for “≈ ALL” figures</span></div>
           <span class="row-end">${icon('chev-right')}</span>
         </li>
       </ul>
@@ -90,7 +90,7 @@ function accountForm(a) {
     <div class="field"><span class="label">Currency</span>
       ${used ? `<p class="small"><b>${a.currency}</b> <span class="hint">— can’t change once the account has money recorded</span></p>` : currencySeg(a?.currency ?? 'ALL')}</div>
     ${a ? `<label class="check-line"><input type="checkbox" name="archived" ${a.archived ? 'checked' : ''}> Hide from forms (keeps its history)</label>` : ''}
-    ${a && !used ? `<button type="button" class="btn btn-danger-ghost btn-block" data-act="acc-delete">Delete account</button>` : ''}`;
+    ${a && !used ? `<button type="button" class="btn btn-danger-ghost" data-act="acc-delete">Delete account</button>` : ''}`;
 }
 
 registerActions({
@@ -132,16 +132,23 @@ registerActions({
     });
   },
   'defrate-edit': () => openSheet({
-    title: 'Exchange rate',
-    body: `<label class="field"><span class="label">1 EUR = ? ALL</span><input class="input input-amount" name="rate" inputmode="decimal" value="${formatRate(state.settings.defaultRate)}" autofocus></label>
-      <p class="hint">Applies to open months and new months. Closed months keep the rate saved when they were closed. Your ALL and EUR amounts are never changed.</p>`,
+    title: 'Exchange rates',
+    body: `<label class="field field-inline"><span class="label">1 EUR = ? ALL</span><input class="input input-right" name="eur" inputmode="decimal" value="${formatRate(state.settings.defaultRate)}"></label>
+      <label class="field field-inline"><span class="label">1 USD = ? ALL</span><input class="input input-right" name="usd" inputmode="decimal" value="${formatRate(state.settings.usdRate)}"></label>
+      <p class="hint">Applies to open months and new months. Closed months keep the rates saved when they were closed. Your amounts always stay in their own currency.</p>`,
     onSubmit: async (form) => {
-      const r = parseRate(form.rate.value);
-      if (!r.ok) return fieldError(form, 'rate', r.error);
-      await setRate(r.rate);
-      toast(`1 EUR = ${formatRate(r.rate)} ALL`);
+      const e = parseRate(form.eur.value);
+      if (!e.ok) return fieldError(form, 'eur', e.error);
+      const u = parseRate(form.usd.value);
+      if (!u.ok) return fieldError(form, 'usd', u.error);
+      await setRates({ EUR: e.rate, USD: u.rate });
+      toast('Rates saved');
     },
   }),
+  'logout-ask': async () => {
+    const ok = await confirmDialog({ title: 'Log out?', message: 'Your data stays on this device. You’ll need your password to open Planner again.', confirmLabel: 'Log out', danger: true });
+    if (ok) actions['log-out']();
+  },
   'backup-export': async () => {
     const data = backupObject();
     const name = `planner-backup-${localDateParts().date}.json`;

@@ -1,6 +1,6 @@
 // Small UI toolkit: escaping, bottom sheets, confirm dialog, toasts, shared widgets.
 import { icon } from './icons.js';
-import { formatMoney, combinedAll, formatRate } from './money.js';
+import { formatMoney, CURRENCIES, FOREIGN } from './money.js';
 
 export const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -39,12 +39,19 @@ let lastFocus = null;
 /**
  * openSheet({ title, body, submitLabel, onSubmit(form) → false keeps it open, actions, onOpen })
  */
+/**
+ * openSheet({ title, body, submitLabel, onSubmit(form) → false keeps it open, actions, onOpen, footer })
+ * Footer layout (top → bottom): [secondary · primary] then the destructive action, so the
+ * main action is closest to the thumb and "Delete" is never between the fields and "Save".
+ * Any .btn-danger-ghost in the body is moved to that last slot automatically.
+ */
 export function openSheet({ title, body, submitLabel = 'Save', onSubmit = null, actions: acts = {}, onOpen, footer = '' }) {
   const root = document.getElementById('sheet-root');
   const wasOpen = root.classList.contains('open') && !root.classList.contains('closing');
   sheetToken++;
-  if (!wasOpen) lastFocus = document.activeElement;
+  if (!wasOpen) { lastFocus = document.activeElement; lockPageScroll(); }
   sheetActions = { 'sheet-close': () => closeSheet(), ...acts };
+  const primary = onSubmit ? `<button class="btn btn-primary" type="submit">${esc(submitLabel)}</button>` : '';
   root.innerHTML = `
     <div class="sheet-backdrop" data-act="sheet-close"></div>
     <form class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}" novalidate autocomplete="off">
@@ -54,12 +61,20 @@ export function openSheet({ title, body, submitLabel = 'Save', onSubmit = null, 
         <button type="button" class="glass-btn sm" data-act="sheet-close" aria-label="Close">${icon('x')}</button>
       </header>
       <div class="sheet-body">${body}</div>
-      ${onSubmit || footer ? `<footer class="sheet-foot">${footer}${onSubmit ? `<button class="btn btn-primary btn-block" type="submit">${esc(submitLabel)}</button>` : ''}</footer>` : ''}
+      <footer class="sheet-foot">
+        ${footer || primary ? `<div class="foot-row">${footer}${primary}</div>` : ''}
+        <div class="foot-danger"></div>
+      </footer>
     </form>`;
+  const foot = root.querySelector('.sheet-foot');
+  const dangers = root.querySelectorAll('.sheet-body .btn-danger-ghost');
+  dangers.forEach((b) => root.querySelector('.foot-danger').appendChild(b));
+  if (!footer && !primary && !dangers.length) foot.remove();
   root.classList.remove('closing');
   root.classList.toggle('swap', wasOpen); // replacing one sheet with another: no slide-in
   root.classList.add('open');
   document.body.classList.add('sheet-open');
+  trackViewport(true);
   const form = root.querySelector('form');
   let busy = false;
   form.addEventListener('submit', async (e) => {
@@ -76,6 +91,11 @@ export function openSheet({ title, body, submitLabel = 'Save', onSubmit = null, 
       busy = false;
     }
   });
+  // keep the focused field visible inside the sheet once the keyboard has opened
+  form.addEventListener('focusin', (e) => {
+    if (!e.target.matches('input, select, textarea')) return;
+    setTimeout(() => e.target.scrollIntoView({ block: 'nearest' }), 320);
+  });
   onOpen?.(form);
   const auto = form.querySelector('[autofocus]');
   if (auto) auto.focus({ preventScroll: true });
@@ -84,6 +104,40 @@ export function openSheet({ title, body, submitLabel = 'Save', onSubmit = null, 
 
 let sheetToken = 0;
 
+// ---------- keyboard-aware sheets ----------
+// iOS doesn't shrink the page when the keyboard opens, it only shrinks the "visual viewport".
+// The sheet layer follows the visual viewport, so the sheet sits right above the keyboard
+// and the page underneath never has to scroll.
+let scrollLockY = 0;
+function lockPageScroll() {
+  scrollLockY = window.scrollY;
+  Object.assign(document.body.style, { position: 'fixed', top: `-${scrollLockY}px`, left: '0', right: '0' });
+}
+function unlockPageScroll() {
+  Object.assign(document.body.style, { position: '', top: '', left: '', right: '' });
+  window.scrollTo(0, scrollLockY);
+}
+
+function syncViewport() {
+  const root = document.getElementById('sheet-root');
+  const vv = window.visualViewport;
+  if (!vv) return;
+  root.style.top = `${vv.offsetTop}px`;
+  root.style.height = `${vv.height}px`;
+  root.classList.toggle('kb', window.innerHeight - vv.height > 120); // keyboard is up
+}
+function trackViewport(on) {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  vv.removeEventListener('resize', syncViewport);
+  vv.removeEventListener('scroll', syncViewport);
+  if (on) {
+    vv.addEventListener('resize', syncViewport);
+    vv.addEventListener('scroll', syncViewport);
+    syncViewport();
+  }
+}
+
 export function closeSheet() {
   const root = document.getElementById('sheet-root');
   if (!root.classList.contains('open') || root.classList.contains('closing')) return;
@@ -91,10 +145,15 @@ export function closeSheet() {
   sheetActions = {};
   root.classList.add('closing');
   document.body.classList.remove('sheet-open');
+  document.activeElement?.blur?.();
+  unlockPageScroll();
   if (lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
   const done = () => {
     if (token !== sheetToken) return; // a new sheet opened meanwhile
-    root.classList.remove('open', 'closing', 'swap');
+    trackViewport(false);
+    root.classList.remove('open', 'closing', 'swap', 'kb');
+    root.style.top = '';
+    root.style.height = '';
     root.innerHTML = '';
   };
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) done();
@@ -135,10 +194,8 @@ export function confirmDialog({ title, message, confirmLabel = 'Confirm', cancel
     openSheet({
       title,
       body: `<p class="sheet-text">${message}</p>`,
-      footer: `<div class="btn-row">
-          <button type="button" class="btn btn-ghost" data-act="cf-no">${esc(cancelLabel)}</button>
-          <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-act="cf-yes">${esc(confirmLabel)}</button>
-        </div>`,
+      footer: `<button type="button" class="btn btn-ghost" data-act="cf-no">${esc(cancelLabel)}</button>
+          <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-act="cf-yes">${esc(confirmLabel)}</button>`,
       actions: { 'cf-yes': () => answer(true), 'cf-no': () => answer(false), 'sheet-close': () => answer(false) },
     });
   });
@@ -198,34 +255,36 @@ export function switchRow(name, checked, label, hint = '') {
     <span class="switch"><input type="checkbox" name="${name}" ${checked ? 'checked' : ''}><span></span></span></label>`;
 }
 
-export function segmented(name, options, value, { small = false } = {}) {
-  return `<div class="seg ${small ? 'seg-sm' : ''}" role="radiogroup">${options.map(([v, label]) => `
-    <label class="seg-opt"><input type="radio" name="${name}" value="${esc(v)}" ${v === value ? 'checked' : ''}><span>${esc(label)}</span></label>`).join('')}
+export function segmented(name, options, value, { small = false, cls = '' } = {}) {
+  return `<div class="seg ${small ? 'seg-sm' : ''} ${cls}" role="radiogroup">${options.map(([v, label]) => `
+    <label class="seg-opt" data-v="${esc(v)}"><input type="radio" name="${name}" value="${esc(v)}" ${v === value ? 'checked' : ''}><span>${esc(label)}</span></label>`).join('')}
   </div>`;
 }
 
-export const currencySeg = (value, name = 'currency') => segmented(name, [['ALL', 'ALL'], ['EUR', 'EUR']], value);
+export const currencySeg = (value, name = 'currency') => segmented(name, CURRENCIES.map((c) => [c, c]), value, { cls: 'seg-cur' });
 
 export function emptyState(title, text = '', button = '') {
   return `<div class="empty"><p class="empty-title">${esc(title)}</p>${text ? `<p class="empty-text">${text}</p>` : ''}${button}</div>`;
 }
 
-/** "12,500 ALL · €40.00" — only non-zero parts, never mixed. */
+/** "12,500 ALL · €40.00 · $5.00" — only non-zero parts, never mixed. */
 export function pairText(pair, { always = false } = {}) {
-  const parts = [];
-  if (pair.ALL || always) parts.push(formatMoney(pair.ALL, 'ALL'));
-  if (pair.EUR) parts.push(formatMoney(pair.EUR, 'EUR'));
+  const parts = CURRENCIES.filter((c) => pair[c] || (always && c === 'ALL')).map((c) => formatMoney(pair[c], c));
   return parts.length ? parts.join(' · ') : formatMoney(0, 'ALL');
 }
 
-/** Labelled converted total. */
-export function convertedText(pair, rate) {
-  return `≈ ${formatMoney(combinedAll(pair, rate), 'ALL')}`;
+/** Big ALL amount with a small unit, plus smaller lines for other currencies. */
+export function moneyStack(label, pair, { show = ['EUR'], neg = false } = {}) {
+  const others = FOREIGN.filter((c) => show.includes(c) || pair[c]);
+  return `<div class="money-stack">
+    <p class="eyebrow">${esc(label)}</p>
+    <p class="big sm ${neg ? 'neg' : ''}">${formatMoney(pair.ALL || 0, 'ALL').replace(' ALL', '')}<span class="unit">ALL</span></p>
+    ${others.map((c) => `<p class="sub-amt">${formatMoney(pair[c] || 0, c)}</p>`).join('')}
+  </div>`;
 }
 
-export function rateNote(rate) {
-  return `converted at 1 EUR = ${formatRate(rate)} ALL`;
-}
+/** Foreign currencies that should get a line in a group of stacks (EUR always, USD when used). */
+export const shownCurrencies = (...pairs) => ['EUR', ...(pairs.some((p) => p.USD) ? ['USD'] : [])];
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

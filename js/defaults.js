@@ -1,15 +1,18 @@
 // Default accounts, categories and lists, the month template, and data migrations.
 import { sourceMonthId } from './ledger.js';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const DEFAULT_RATE = 97; // 1 EUR = 97 ALL — edit it in Settings to match today's rate
+export const DEFAULT_USD_RATE = 90; // 1 USD = 90 ALL — edit it in Settings
 
 export const DEFAULT_ACCOUNTS = [
   { id: 'bank1', name: 'Bank account 1', currency: 'ALL', kind: 'bank' },
   { id: 'bank2', name: 'Bank account 2', currency: 'EUR', kind: 'bank' },
   { id: 'cash_all', name: 'Cash ALL', currency: 'ALL', kind: 'cash' },
   { id: 'cash_eur', name: 'Cash EUR', currency: 'EUR', kind: 'cash' },
+  { id: 'cash_usd', name: 'Cash USD', currency: 'USD', kind: 'cash' },
 ];
+const USD_ACCOUNT = DEFAULT_ACCOUNTS.find((a) => a.id === 'cash_usd');
 
 export const ACCOUNT_KINDS = { bank: 'Bank', cash: 'Cash', savings: 'Savings' };
 
@@ -43,9 +46,10 @@ export function defaultSettings() {
     schema: SCHEMA_VERSION,
     accounts: DEFAULT_ACCOUNTS.map((a) => ({ ...a })),
     defaultRate: DEFAULT_RATE,
+    usdRate: DEFAULT_USD_RATE,
     defaultAccounts: {
-      expense: { ALL: 'cash_all', EUR: 'cash_eur' },
-      income: { ALL: 'bank1', EUR: 'bank2' },
+      expense: { ALL: 'cash_all', EUR: 'cash_eur', USD: 'cash_usd' },
+      income: { ALL: 'bank1', EUR: 'bank2', USD: 'cash_usd' },
     },
     lastCurrency: 'ALL',
     activityIdeas: [],
@@ -84,6 +88,7 @@ export function createMonthRecord(state, id, makeId, now = new Date().toISOStrin
     id,
     createdAt: now,
     rate: src?.closing?.rate ?? src?.rate ?? state.settings.defaultRate,
+    usdRate: src?.closing?.usdRate ?? src?.usdRate ?? state.settings.usdRate,
     openingMode: src ? 'carried' : 'manual',
     openingBalances: {},
     closing: null,
@@ -162,6 +167,13 @@ export function migrateData({ settings, months, transactions, receivables }) {
     const used = transactions.some((t) => t.accountId === 'savings' || t.toAccountId === 'savings') ||
       months.some((m) => m.openingBalances?.savings || m.closing?.balances?.savings);
     if (!used) s.accounts = s.accounts.filter((a) => a.id !== 'savings');
+  }
+  if (settings && (settings.schema ?? 1) < 3) {
+    changed = true;
+    // v3 adds US dollars: give the user a USD cash account if they have no USD account yet.
+    if (!s.accounts.some((a) => a.currency === 'USD') && !s.accounts.some((a) => a.id === USD_ACCOUNT.id)) {
+      s.accounts = [...s.accounts, { ...USD_ACCOUNT }];
+    }
     s.schema = SCHEMA_VERSION;
   }
   const ms = months.map((m) => {

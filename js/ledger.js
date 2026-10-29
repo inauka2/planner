@@ -54,7 +54,7 @@ export function localDateParts(d = new Date()) {
 }
 
 // ---------- helpers ----------
-export const zero = () => ({ ALL: 0, EUR: 0 });
+export const zero = () => ({ ALL: 0, EUR: 0, USD: 0 });
 
 export function sourceMonthId(state, id) {
   let best = null;
@@ -72,9 +72,24 @@ export function monthTxs(state, id) {
   return state.transactions.filter((t) => t.monthId === id);
 }
 
+/** EUR rate (ALL per 1 EUR) of a month: the closing snapshot's, else the month's own. */
 export function getRate(state, id) {
+  return getRates(state, id).EUR;
+}
+
+/** All rates of a month: { EUR, USD } in ALL. Closed months use the rates saved at closing. */
+export function getRates(state, id) {
   const m = state.months[id];
-  return m?.closing?.rate ?? m?.rate ?? state.settings.defaultRate;
+  const s = state.settings;
+  if (m?.closing) {
+    return { EUR: m.closing.rate, USD: m.closing.usdRate ?? m.usdRate ?? s.usdRate };
+  }
+  return { EUR: m?.rate ?? s.defaultRate, USD: m?.usdRate ?? s.usdRate };
+}
+
+/** Accept a plain EUR rate (number) or a { EUR, USD } object. */
+export function asRates(rates, fallback) {
+  return typeof rates === 'number' ? { ...fallback, EUR: rates } : { ...fallback, ...rates };
 }
 
 export function accountById(state, id) {
@@ -98,7 +113,7 @@ export function applyTransactions(opening, txs) {
   return b;
 }
 
-/** Sum per-account balances into {ALL, EUR} using each account's currency. */
+/** Sum per-account balances into {ALL, EUR, USD} using each account's currency. */
 export function byCurrency(state, balances) {
   const r = zero();
   for (const [id, cents] of Object.entries(balances)) {
@@ -127,7 +142,8 @@ export function closingBalances(state, id, depth = 0) {
 // ---------- month summary ----------
 export function monthSummary(state, id) {
   const txs = monthTxs(state, id);
-  const rate = getRate(state, id);
+  const rates = getRates(state, id);
+  const rate = rates.EUR;
   const open = openingInfo(state, id);
   const closingBal = applyTransactions(open.balances, txs);
   const kind = (accId) => accountById(state, accId)?.kind;
@@ -165,10 +181,10 @@ export function monthSummary(state, id) {
 
   const opening = byCurrency(state, open.balances);
   const closing = byCurrency(state, closingBal);
-  const all = (pair) => combinedAll(pair, rate);
+  const all = (pair) => combinedAll(pair, rates);
 
   return {
-    id, rate, count: txs.length,
+    id, rate, rates, count: txs.length,
     openingStatus: open.status, openingFrom: open.from,
     openingBalances: open.balances, closingBalances: closingBal,
     opening, closing, income, spending, adjust, exchange, savings, byCategory, daily,
@@ -266,7 +282,8 @@ export function canReopen(state, id) {
  * computed ones, balance-correction transactions are created so that
  * opening + transactions == confirmed closing (books always reconcile).
  */
-export function buildClosing(state, id, confirmed, rate, { makeId, now }) {
+export function buildClosing(state, id, confirmed, ratesIn, { makeId, now }) {
+  const rates = asRates(ratesIn, getRates(state, id));
   const computed = closingBalances(state, id);
   const { last } = monthBounds(id);
   const ids = new Set([...state.settings.accounts.map((a) => a.id), ...Object.keys(computed)]);
@@ -287,9 +304,9 @@ export function buildClosing(state, id, confirmed, rate, { makeId, now }) {
     }
   }
   const after = { ...state, transactions: [...state.transactions, ...adjustments] };
-  const s = monthSummary({ ...after, months: { ...state.months, [id]: { ...state.months[id], rate } } }, id);
+  const s = monthSummary({ ...after, months: { ...state.months, [id]: { ...state.months[id], rate: rates.EUR, usdRate: rates.USD } } }, id);
   const closing = {
-    balances, rate, confirmedAt: now,
+    balances, rate: rates.EUR, usdRate: rates.USD, confirmedAt: now,
     totals: { opening: s.opening, income: s.income, spending: s.spending, closing: s.closing, spendingAll: s.all.spending },
   };
   return { closing, adjustments };
@@ -302,7 +319,7 @@ export function validateTx(tx, accounts) {
   if (!isMonthId(tx.monthId)) return 'Invalid month';
   if (!Number.isSafeInteger(tx.amount)) return 'Invalid amount';
   if (tx.type === 'adjust' ? tx.amount === 0 : tx.amount <= 0) return 'Amount must be more than 0';
-  if (!isCurrency(tx.currency)) return 'Currency must be ALL or EUR';
+  if (!isCurrency(tx.currency)) return 'Currency must be ALL, EUR or USD';
   const from = acc(tx.accountId);
   if (!from) return 'Choose an account';
   if (from.currency !== tx.currency) return `${from.name} holds ${from.currency}, not ${tx.currency}`;

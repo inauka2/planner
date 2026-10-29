@@ -12,6 +12,7 @@ export const state = {
   hasRestorePoint: false,
   storageError: null,
   lock: null, // password hash record (never part of backups)
+  signedIn: false, // stays true until the user logs out
 };
 
 const listeners = new Set();
@@ -47,6 +48,7 @@ export async function load() {
     state.transactions = data.transactions;
     state.hasRestorePoint = !!kvMap.restorePoint;
     state.lock = kvMap.lock || null;
+    state.signedIn = kvMap.session?.signedIn === true;
     state.storageError = null;
   } catch (e) {
     console.error(e);
@@ -85,13 +87,13 @@ export function saveSettings(patch) {
   return write([op.settings()]);
 }
 
-/** Exchange rate: becomes the default and applies to every open, editable month. */
-export function setRate(rate) {
-  state.settings = { ...state.settings, defaultRate: rate };
+/** Exchange rates { EUR, USD }: become the defaults and apply to every open, editable month. */
+export function setRates({ EUR, USD }) {
+  state.settings = { ...state.settings, defaultRate: EUR, usdRate: USD };
   const ops = [op.settings()];
   for (const m of Object.values(state.months)) {
-    if (m.closing || !canEdit(state, m.id).ok || m.rate === rate) continue;
-    const mm = { ...m, rate };
+    if (m.closing || !canEdit(state, m.id).ok || (m.rate === EUR && m.usdRate === USD)) continue;
+    const mm = { ...m, rate: EUR, usdRate: USD };
     state.months[m.id] = mm;
     ops.push(op.month(mm));
   }
@@ -174,12 +176,12 @@ export function deleteReceivable(id) {
 }
 
 // ---------- closing ----------
-export function closeMonth(id, confirmed, rate) {
+export function closeMonth(id, confirmed, rates) {
   assertOk(canClose(state, id));
   const now = nowIso();
-  const { closing, adjustments } = buildClosing(state, id, confirmed, rate, { makeId: uid, now });
+  const { closing, adjustments } = buildClosing(state, id, confirmed, rates, { makeId: uid, now });
   state.transactions = [...state.transactions, ...adjustments];
-  const m = { ...state.months[id], rate, closing };
+  const m = { ...state.months[id], rate: closing.rate, usdRate: closing.usdRate, closing };
   state.months[id] = m;
   return write([...adjustments.map(op.tx), op.month(m)]);
 }
@@ -228,11 +230,19 @@ export async function undoRestore() {
 }
 
 // ---------- password ----------
-const lockKv = () => (state.lock ? [{ key: 'lock', value: state.lock }] : []);
+const lockKv = () => (state.lock
+  ? [{ key: 'lock', value: state.lock }, { key: 'session', value: { signedIn: state.signedIn } }]
+  : []);
 
 export async function saveLock(lock) {
   await db.batch([{ store: 'kv', value: { key: 'lock', value: lock } }]);
   state.lock = lock;
+}
+
+/** Signed in once = stays signed in on this device until "Log out". */
+export async function setSignedIn(signedIn) {
+  await db.batch([{ store: 'kv', value: { key: 'session', value: { signedIn } } }]);
+  state.signedIn = signedIn;
 }
 
 /** Forgotten password: wipe everything on this device (a backup can be restored afterwards). */

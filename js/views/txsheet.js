@@ -2,7 +2,7 @@
 // a new expense needs only an amount (with currency) and a description.
 import { state, saveTx, deleteTx, saveSettings, uid } from '../store.js';
 import { parseAmount, centsToInput, convertCents, formatMoney, formatRate } from '../money.js';
-import { canEdit, monthBounds, localDateParts, getRate, accountById } from '../ledger.js';
+import { canEdit, monthBounds, localDateParts, getRates, accountById } from '../ledger.js';
 import { openSheet, closeSheet, fieldError, toast, esc, segmented, currencySeg, confirmDialog } from '../ui.js';
 import { ACCOUNT_KINDS } from '../defaults.js';
 
@@ -95,7 +95,7 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
         </select>
       </label>` : ''}
     ${tx?.link ? `<p class="hint">Linked to ${tx.link.kind === 'plan' ? 'a planned item' : 'money owed to you'}. Deleting this un-ticks it.</p>` : ''}
-    ${editing ? `<button type="button" class="btn btn-danger-ghost btn-block" data-act="tx-delete">Delete ${t}</button>` : ''}
+    ${editing ? `<button type="button" class="btn btn-danger-ghost" data-act="tx-delete">Delete ${t}</button>` : ''}
   `;
 
   openSheet({
@@ -173,13 +173,16 @@ function presetAccounts(preset) {
     const from = find('bank', to?.currency) || find('bank');
     return [from, to];
   }
-  if (preset === 'exchange') return [find('cash', 'EUR'), find('cash', 'ALL')];
+  if (preset === 'exchange') {
+    const cur = state.settings.lastCurrency !== 'ALL' ? state.settings.lastCurrency : 'EUR';
+    return [find('cash', cur) || find('cash', 'EUR'), find('cash', 'ALL')];
+  }
   return [accs[0], accs[1]];
 }
 
 function openTransferSheet({ monthId, tx, prefill }) {
   const editing = !!tx;
-  const rate = getRate(state, monthId);
+  const rates = getRates(state, monthId);
   const [pf, pt] = presetAccounts(prefill.preset || 'atm');
   const fromId = tx?.accountId ?? pf?.id;
   const toId = tx?.toAccountId ?? pt?.id;
@@ -191,7 +194,7 @@ function openTransferSheet({ monthId, tx, prefill }) {
     ${editing ? '' : `<div class="chips" role="group" aria-label="Quick presets">
       <button type="button" class="chip" data-act="tr-preset" data-preset="atm">ATM withdrawal</button>
       ${state.settings.accounts.some((a) => a.kind === 'savings' && !a.archived) ? '<button type="button" class="chip" data-act="tr-preset" data-preset="savings">To savings</button>' : ''}
-      <button type="button" class="chip" data-act="tr-preset" data-preset="exchange">Exchange EUR → ALL</button>
+      <button type="button" class="chip" data-act="tr-preset" data-preset="exchange">Exchange → ALL</button>
     </div>`}
     <label class="field"><span class="label">From</span><select class="select" name="from">${allAccountOptions(fromId)}</select></label>
     <label class="field"><span class="label">To</span><select class="select" name="to">${allAccountOptions(toId)}</select></label>
@@ -201,14 +204,14 @@ function openTransferSheet({ monthId, tx, prefill }) {
     <div class="field" data-received hidden>
       <span class="label">Amount received <span class="cur-tag" data-to-cur></span></span>
       <input class="input" name="toAmount" inputmode="decimal" placeholder="0" value="${tx && tx.toCurrency !== tx.currency ? centsToInput(tx.toAmount) : ''}">
-      <p class="hint">Suggested at 1 EUR = ${formatRate(rate)} ALL — change it to what you actually received.</p>
+      <p class="hint" data-rate-hint></p>
     </div>
     <label class="field"><span class="label">Note <span class="optional">optional</span></span>
       <input class="input" name="description" maxlength="120" placeholder="e.g. ATM withdrawal" value="${esc(tx?.description ?? '')}">
     </label>
     ${editing ? dateFields(monthId, dt.date, dt.time) : ''}
     <p class="hint">Moving money between your own accounts is never counted as spending.</p>
-    ${editing ? `<button type="button" class="btn btn-danger-ghost btn-block" data-act="tx-delete">Delete transfer</button>` : ''}
+    ${editing ? `<button type="button" class="btn btn-danger-ghost" data-act="tx-delete">Delete transfer</button>` : ''}
   `;
 
   let toEdited = editing && tx.toCurrency !== tx.currency;
@@ -220,9 +223,13 @@ function openTransferSheet({ monthId, tx, prefill }) {
     form.querySelector('[data-to-cur]').textContent = to?.currency ?? '';
     const cross = from && to && from.currency !== to.currency;
     form.querySelector('[data-received]').hidden = !cross;
+    if (cross) {
+      const foreign = from.currency === 'ALL' ? to.currency : from.currency;
+      form.querySelector('[data-rate-hint]').textContent = `Suggested at 1 ${foreign} = ${formatRate(rates[foreign])} ALL — change it to what you actually received.`;
+    }
     if (cross && !toEdited) {
       const a = parseAmount(form.amount.value);
-      form.toAmount.value = a.ok ? centsToInput(convertCents(a.cents, from.currency, to.currency, rate)) : '';
+      form.toAmount.value = a.ok ? centsToInput(convertCents(a.cents, from.currency, to.currency, rates)) : '';
     }
   };
 
@@ -297,7 +304,7 @@ function openAdjustmentInfo(tx) {
     title: 'Balance correction',
     body: `<p class="sheet-text">${formatMoney(tx.amount, tx.currency, { plus: true })} on <b>${esc(acc?.name)}</b> (${esc(tx.description)}).</p>
       <p class="hint">Corrections make the app match your real balance. They are not spending or income.</p>
-      <button type="button" class="btn btn-danger-ghost btn-block" data-act="adj-delete">Delete correction</button>`,
+      <button type="button" class="btn btn-danger-ghost" data-act="adj-delete">Delete correction</button>`,
     actions: {
       'adj-delete': async () => {
         const undo = await deleteTx(tx.id);

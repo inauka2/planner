@@ -1,8 +1,13 @@
 // Money helpers. All amounts are stored as integer minor units ("cents")
-// in their ORIGINAL currency. ALL and EUR are never added together without
+// in their ORIGINAL currency. Different currencies are never added together without
 // going through toAllCents() with an explicit exchange rate.
+//
+// "rates" = how many ALL one unit is worth: { EUR: 97, USD: 90 }.
+// A plain number is accepted as the EUR rate (older data and tests).
 
-export const CURRENCIES = ['ALL', 'EUR'];
+export const CURRENCIES = ['ALL', 'EUR', 'USD'];
+export const FOREIGN = ['EUR', 'USD'];
+export const CURRENCY_NAMES = { ALL: 'Lek', EUR: 'Euro', USD: 'Dollar' };
 export const MAX_CENTS = 1e13; // 100 billion units — far beyond any personal amount
 
 export const isCurrency = (c) => CURRENCIES.includes(c);
@@ -19,8 +24,8 @@ export function parseAmount(input, { allowNegative = false, allowZero = false } 
   let s = String(input ?? '')
     .trim()
     .replace(/[\s ']/g, '')
-    .replace(/^(€|eur|all|lek)/i, '')
-    .replace(/(€|eur|all|lek)$/i, '');
+    .replace(/^(€|\$|eur|usd|all|lek)/i, '')
+    .replace(/(€|\$|eur|usd|all|lek)$/i, '');
   if (!s) return { ok: false, error: 'Enter an amount' };
 
   let neg = false;
@@ -82,28 +87,34 @@ export function parseRate(input) {
   return { ok: true, rate };
 }
 
-/** Convert cents in `currency` to ALL cents using `rate` (ALL per 1 EUR). */
-export function toAllCents(cents, currency, rate) {
+function rateOf(rates, currency) {
+  return typeof rates === 'number' ? (currency === 'EUR' ? rates : undefined) : rates?.[currency];
+}
+
+/** Convert cents in `currency` to ALL cents using the rate for that currency. */
+export function toAllCents(cents, currency, rates) {
   if (currency === 'ALL') return cents;
-  if (currency === 'EUR') {
-    if (!(rate > 0)) throw new Error('A valid exchange rate is required to convert EUR');
-    return Math.round(cents * rate);
-  }
-  throw new Error(`Unknown currency ${currency}`);
+  if (!FOREIGN.includes(currency)) throw new Error(`Unknown currency ${currency}`);
+  const r = rateOf(rates, currency);
+  if (!(r > 0)) throw new Error(`A valid ${currency} exchange rate is required`);
+  return Math.round(cents * r);
 }
 
-/** Convert between the two currencies with an explicit rate. */
-export function convertCents(cents, from, to, rate) {
+/** Convert between any two supported currencies (via ALL). */
+export function convertCents(cents, from, to, rates) {
   if (from === to) return cents;
-  if (!(rate > 0)) throw new Error('A valid exchange rate is required');
-  if (from === 'EUR' && to === 'ALL') return Math.round(cents * rate);
-  if (from === 'ALL' && to === 'EUR') return Math.round(cents / rate);
-  throw new Error(`Cannot convert ${from} to ${to}`);
+  const all = toAllCents(cents, from, rates);
+  if (to === 'ALL') return all;
+  const r = rateOf(rates, to);
+  if (!(r > 0)) throw new Error(`A valid ${to} exchange rate is required`);
+  return Math.round(all / r);
 }
 
-/** Sum a {ALL, EUR} pair into an ALL equivalent. */
-export function combinedAll(pair, rate) {
-  return (pair.ALL || 0) + toAllCents(pair.EUR || 0, 'EUR', rate);
+/** Sum a {ALL, EUR, USD} pair into an ALL equivalent. */
+export function combinedAll(pair, rates) {
+  let total = pair.ALL || 0;
+  for (const c of FOREIGN) if (pair[c]) total += toAllCents(pair[c], c, rates);
+  return total;
 }
 
 export function formatMoney(cents, currency, { plus = false } = {}) {
@@ -113,6 +124,7 @@ export function formatMoney(cents, currency, { plus = false } = {}) {
   const w = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   const sign = cents < 0 ? '−' : plus && cents > 0 ? '+' : '';
   if (currency === 'EUR') return `${sign}€${w}.${pad2(frac)}`;
+  if (currency === 'USD') return `${sign}$${w}.${pad2(frac)}`;
   return `${sign}${w}${frac ? '.' + pad2(frac) : ''} ALL`;
 }
 
