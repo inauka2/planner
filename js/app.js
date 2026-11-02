@@ -1,5 +1,5 @@
 // App bootstrap: hash router, rendering, motion, global event delegation, service worker.
-import { state, load, subscribe, ensureMonth, setWriteErrorHandler, setSignedIn } from './store.js';
+import { state, load, subscribe, ensureMonth, setWriteErrorHandler } from './store.js';
 import { isMonthId, monthLabel, localDateParts, prevMonthId, nextMonthId, canEdit, parseMonthId } from './ledger.js';
 import { icon } from './icons.js';
 import { dispatch, registerActions, toast, isSheetOpen, closeSheet, setRenderer, esc } from './ui.js';
@@ -12,7 +12,6 @@ import { renderSummary } from './views/summary.js';
 import { renderSettings, importBackupFile } from './views/settings.js';
 import { openTxSheet } from './views/txsheet.js';
 import { addPlanItem } from './views/plan.js';
-import { lockGate } from './views/lockscreen.js';
 
 const TABS = [
   { key: 'budget', label: 'Budget', title: 'Budget', render: renderBudget },
@@ -84,21 +83,7 @@ function transitionFor(r) {
   return null;
 }
 
-let locked = true; // nothing is rendered until signed in
-
-async function logOut() {
-  await setSignedIn(false);
-  locked = true;
-  closeSheet();
-  app.innerHTML = '';
-  last = null;
-  await lockGate();
-  locked = false;
-  await render();
-}
-
 export async function render() {
-  if (locked) return;
   const r = parseRoute();
   if (r.name === 'month' && !state.months[r.id]) {
     try { await ensureMonth(r.id); } catch { /* error toast shown by store */ }
@@ -182,16 +167,13 @@ setWriteErrorHandler((err) => toast(`Couldn’t save: ${err.message || 'storage 
 (async function boot() {
   await load();
   app.innerHTML = '';
-  if (!state.storageError) await lockGate();
-  locked = false;
   await render();
   navigator.storage?.persist?.().catch(() => {});
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && !locked && !isSheetOpen()) render(); // the date may have changed
+    if (!document.hidden && !isSheetOpen()) render(); // the date may have changed
   });
 })();
 
-registerActions({ 'log-out': () => logOut() });
 
 // ---------- service worker (offline + updates) ----------
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {

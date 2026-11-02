@@ -11,8 +11,6 @@ export const state = {
   receivables: [],
   hasRestorePoint: false,
   storageError: null,
-  lock: null, // password hash record (never part of backups)
-  signedIn: false, // stays true until the user logs out
 };
 
 const listeners = new Set();
@@ -47,8 +45,11 @@ export async function load() {
     state.months = Object.fromEntries(data.months.map((m) => [m.id, m]));
     state.transactions = data.transactions;
     state.hasRestorePoint = !!kvMap.restorePoint;
-    state.lock = kvMap.lock || null;
-    state.signedIn = kvMap.session?.signedIn === true || (!!kvMap.lock && signedInMirror());
+    if (kvMap.lock || kvMap.session) {
+      // The app password was removed in 1.5 — clear what earlier versions stored.
+      await db.batch([{ store: 'kv', delete: 'lock' }, { store: 'kv', delete: 'session' }]);
+      try { localStorage.removeItem('planner.signedIn'); } catch { /* ignore */ }
+    }
     state.storageError = null;
   } catch (e) {
     console.error(e);
@@ -206,7 +207,6 @@ export async function restoreFrom(raw) {
       { key: 'settings', value: data.settings },
       { key: 'receivables', value: data.receivables },
       { key: 'restorePoint', value: restorePoint },
-      ...lockKv(),
     ],
     months: data.months,
     transactions: data.transactions,
@@ -221,42 +221,12 @@ export async function undoRestore() {
   if (!res.ok) throw new Error('No previous data to go back to.');
   res.data = migrateData(res.data).data;
   await db.replaceAll({
-    kv: [{ key: 'settings', value: res.data.settings }, { key: 'receivables', value: res.data.receivables }, ...lockKv()],
+    kv: [{ key: 'settings', value: res.data.settings }, { key: 'receivables', value: res.data.receivables }],
     months: res.data.months,
     transactions: res.data.transactions,
   });
   await load();
   emit();
-}
-
-// ---------- password ----------
-const lockKv = () => (state.lock
-  ? [{ key: 'lock', value: state.lock }, { key: 'session', value: { signedIn: state.signedIn } }]
-  : []);
-
-export async function saveLock(lock) {
-  await db.batch([{ store: 'kv', value: { key: 'lock', value: lock } }]);
-  state.lock = lock;
-}
-
-/** Signed in once = stays signed in on this device until "Log out". */
-export async function setSignedIn(signedIn) {
-  state.signedIn = signedIn;
-  try { localStorage.setItem(SIGNED_IN_KEY, signedIn ? '1' : '0'); } catch { /* private mode */ }
-  await db.batch([{ store: 'kv', value: { key: 'session', value: { signedIn } } }]);
-}
-
-// A second, independent record of "signed in" so the login form really appears only once.
-const SIGNED_IN_KEY = 'planner.signedIn';
-function signedInMirror() {
-  try { return localStorage.getItem(SIGNED_IN_KEY) === '1'; } catch { return false; }
-}
-
-/** Forgotten password: wipe everything on this device (a backup can be restored afterwards). */
-export async function eraseAll() {
-  try { localStorage.removeItem(SIGNED_IN_KEY); } catch { /* ignore */ }
-  await db.replaceAll({ kv: [], months: [], transactions: [] });
-  await load();
 }
 
 export function markBackedUp() {

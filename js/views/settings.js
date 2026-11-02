@@ -4,12 +4,11 @@ import { parseRate, formatRate } from '../money.js';
 import { validateBackup, toCsv, saveFile } from '../backup.js';
 import { ACCOUNT_KINDS } from '../defaults.js';
 import { icon } from '../icons.js';
-import { esc, registerActions, actions, openSheet, fieldError, toast, confirmDialog } from '../ui.js';
+import { esc, registerActions, openSheet, fieldError, toast, confirmDialog } from '../ui.js';
 import { localDateParts } from '../ledger.js';
-import { changePasswordSheet } from './lockscreen.js';
 import { openAccountSheet } from './accounts.js';
 
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 let persisted = null;
 
 export function renderSettings() {
@@ -35,12 +34,6 @@ export function renderSettings() {
         <li class="row tappable" data-act="acc-add"><span class="accent">${icon('plus', 'ic-xs')} Add account</span></li>
       </ul>
       <p class="hint" style="padding:0 16px">Add each account once. A balance you type here applies to the current month.</p>
-
-      <p class="section-label"><span>Security</span></p>
-      <ul class="list card flush">
-        <li class="row tappable" data-act="pw-change"><div class="row-main"><span class="row-title">Change password</span></div><span class="row-end">${icon('chev-right')}</span></li>
-        <li class="row tappable" data-act="logout-ask"><div class="row-main"><span class="row-title warn">Log out</span><span class="row-sub">You stay signed in on this device until you log out</span></div></li>
-      </ul>
 
       <p class="section-label"><span>Exchange rate</span></p>
       <ul class="list card flush">
@@ -81,7 +74,6 @@ export function renderSettings() {
 }
 
 registerActions({
-  'pw-change': () => changePasswordSheet(),
   'acc-add': async () => {
     const monthId = localDateParts().monthId;
     await ensureMonth(monthId);
@@ -107,10 +99,7 @@ registerActions({
       toast('Rates saved');
     },
   }),
-  'logout-ask': async () => {
-    const ok = await confirmDialog({ title: 'Log out?', message: 'Your data stays on this device. You’ll need your password to open Planner again.', confirmLabel: 'Log out', danger: true });
-    if (ok) actions['log-out']();
-  },
+
   'backup-export': async () => {
     const data = backupObject();
     const name = `planner-backup-${localDateParts().date}.json`;
