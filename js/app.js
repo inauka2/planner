@@ -12,6 +12,9 @@ import { renderSummary } from './views/summary.js';
 import { renderSettings, importBackupFile } from './views/settings.js';
 import { openTxSheet } from './views/txsheet.js';
 import { addPlanItem } from './views/plan.js';
+import { currentUser, logOut } from './auth.js';
+import { useDatabase } from './db.js';
+import { authGate } from './views/authscreen.js';
 
 const TABS = [
   { key: 'budget', label: 'Budget', title: 'Budget', render: renderBudget },
@@ -130,6 +133,15 @@ function setupCarousels(reset) {
 
 setRenderer(render);
 
+registerActions({
+  'log-out': async () => {
+    await logOut();
+    closeSheet();
+    location.hash = '#/';
+    location.reload();
+  },
+});
+
 // ---------- add button ----------
 registerActions({
   fab: (el) => {
@@ -164,7 +176,17 @@ subscribe(() => render());
 setWriteErrorHandler((err) => toast(`Couldn’t save: ${err.message || 'storage error'}. Your last change was undone.`, { duration: 6000 }));
 
 // ---------- boot ----------
+export let user = null; // the signed-in account (data lives in its own database)
+
 (async function boot() {
+  try {
+    user = await currentUser();
+    if (!user) { app.innerHTML = ''; user = await authGate(); }
+    useDatabase(user.dataDb);
+  } catch (e) {
+    console.error(e);
+    toast(`Accounts are unavailable: ${e.message}`);
+  }
   await load();
   app.innerHTML = '';
   await render();

@@ -1,11 +1,18 @@
 // Minimal IndexedDB wrapper. Every write is a single transaction that resolves
 // only once the browser reports it as committed (oncomplete).
 
-const DB_NAME = 'monthly-planner';
+let DB_NAME = 'monthly-planner';
 const DB_VERSION = 1;
 const STORES = ['kv', 'months', 'transactions'];
 
 let dbPromise = null;
+
+/** Each account keeps its data in its own database. Call before load(). */
+export function useDatabase(name) {
+  if (name === DB_NAME) return;
+  DB_NAME = name;
+  dbPromise = null;
+}
 
 export function openDb() {
   if (dbPromise) return dbPromise;

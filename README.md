@@ -70,6 +70,15 @@ Cloudflare Pages and Vercel (static, no framework) work the same way.
 
 **Important:** the Home Screen app and Safari keep **separate** storage on iPhone. Enter your data in the installed app. If you entered data in Safari first, use *Settings → Export backup* there, then *Restore backup* in the installed app.
 
+## Your account
+
+The first time Planner opens on an iPhone, you **create an account** with your email (e.g. Gmail) and a password. You then stay signed in on that iPhone, even after closing the app, until you choose *Settings → Account → Log out*. Sign in again with the same email and password and all your data is there.
+
+- The account and its data live **only on that iPhone**. Nothing is sent online, so your account does not sync to other devices and can't be recovered from a server. Use backups (below) to keep a copy.
+- Several accounts on one iPhone each have their own separate data.
+- *Forgot password?* on the sign-in screen lets you choose a new password using your account's email, so your data can never get locked away.
+- Passwords are stored only as a salted hash (PBKDF2), never in plain text, and are not part of backups.
+
 ## Back up your data
 
 There is no cloud copy and no sync. Your data exists only on that phone, so back it up regularly. The app reminds you after 30 days.

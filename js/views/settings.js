@@ -4,11 +4,13 @@ import { parseRate, formatRate } from '../money.js';
 import { validateBackup, toCsv, saveFile } from '../backup.js';
 import { ACCOUNT_KINDS } from '../defaults.js';
 import { icon } from '../icons.js';
-import { esc, registerActions, openSheet, fieldError, toast, confirmDialog } from '../ui.js';
+import { esc, registerActions, actions, openSheet, fieldError, toast, confirmDialog } from '../ui.js';
 import { localDateParts } from '../ledger.js';
 import { openAccountSheet } from './accounts.js';
+import { user } from '../app.js';
+import { changePassword } from '../auth.js';
 
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 let persisted = null;
 
 export function renderSettings() {
@@ -34,6 +36,13 @@ export function renderSettings() {
         <li class="row tappable" data-act="acc-add"><span class="accent">${icon('plus', 'ic-xs')} Add account</span></li>
       </ul>
       <p class="hint" style="padding:0 16px">Add each account once. A balance you type here applies to the current month.</p>
+
+      ${user ? `<p class="section-label"><span>Account</span></p>
+      <ul class="list card flush">
+        <li class="row has-icon"><span class="icon-tile">${icon('user')}</span><div class="row-main"><span class="row-title">${esc(user.email)}</span><span class="row-sub">Signed in on this iPhone · since ${esc(user.createdAt.slice(0, 10))}</span></div></li>
+        <li class="row tappable" data-act="pw-change"><div class="row-main"><span class="row-title">Change password</span></div><span class="row-end">${icon('chev-right')}</span></li>
+        <li class="row tappable" data-act="logout-ask"><div class="row-main"><span class="row-title warn">Log out</span></div></li>
+      </ul>` : ''}
 
       <p class="section-label"><span>Exchange rate</span></p>
       <ul class="list card flush">
@@ -74,6 +83,23 @@ export function renderSettings() {
 }
 
 registerActions({
+  'pw-change': () => openSheet({
+    title: 'Change password',
+    body: `<label class="field"><span class="label">Current password</span><input class="input" type="password" name="cur" autocomplete="current-password" autocapitalize="none" autofocus></label>
+      <label class="field"><span class="label">New password</span><input class="input" type="password" name="next" autocomplete="new-password" autocapitalize="none"></label>`,
+    onSubmit: async (form) => {
+      try {
+        await changePassword(user, form.cur.value, form.next.value);
+      } catch (e) {
+        return fieldError(form, /current/i.test(e.message) ? 'cur' : 'next', e.message);
+      }
+      toast('Password changed');
+    },
+  }),
+  'logout-ask': async () => {
+    const ok = await confirmDialog({ title: 'Log out?', message: `Your data stays saved in your account on this iPhone. Sign in with ${esc(user.email)} and your password to see it again.`, confirmLabel: 'Log out', danger: true });
+    if (ok) actions['log-out']();
+  },
   'acc-add': async () => {
     const monthId = localDateParts().monthId;
     await ensureMonth(monthId);

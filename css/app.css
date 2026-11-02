@@ -531,6 +531,31 @@ a.tile:active { transform: scale(0.96); }
 .cur-static { display: inline-flex; align-items: center; justify-content: center; min-height: 60px; padding: 0 18px; border-radius: 12px; background: var(--fill-2); font-weight: 600; color: var(--text-2); }
 #kb-proxy { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; pointer-events: none; }
 
+/* ---------- sign up / sign in ---------- */
+#auth-root { position: fixed; inset: 0; z-index: 45; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+body.authing { overflow: hidden; }
+.auth {
+  min-height: 100%; max-width: 380px; margin: 0 auto; padding: calc(var(--top) + 9vh) 20px calc(var(--bottom) + 24px);
+  display: flex; flex-direction: column; align-items: center; gap: 12px; animation: rise 0.5s var(--ease) both;
+}
+.auth-icon { width: 76px; height: 76px; border-radius: 18px; margin-bottom: 6px; }
+.auth h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.025em; text-align: center; }
+.auth-text { color: var(--text-2); font-size: 15px; text-align: center; line-height: 1.4; max-width: 320px; }
+.auth-form { width: 100%; display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.auth-group { display: flex; flex-direction: column; gap: 10px; }
+.auth-field { display: flex; flex-direction: column; gap: 6px; }
+.auth-field > span:first-child { font-size: 13px; color: var(--text-2); font-weight: 500; padding-left: 4px; }
+.pw-wrap { position: relative; display: block; }
+.pw-wrap .input { padding-right: 52px; }
+.pw-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; }
+.pw-eye .ic { width: 21px; height: 21px; }
+.auth-form .field-error { text-align: center; padding: 0; }
+.auth-links { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.auth-links .link-btn { font-size: 16px; padding: 8px; }
+.auth-note { margin-top: auto; padding-top: 24px; font-size: 13px; color: var(--text-3); text-align: center; display: flex; align-items: center; gap: 6px; }
+.shake { animation: shake 0.4s var(--ease); }
+@keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+
 /* ---------- motion ---------- */
 .enter > * { animation: rise 0.5s var(--ease) both; }
 .enter > *:nth-child(2) { animation-delay: 0.03s; }

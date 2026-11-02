@@ -65,3 +65,18 @@ test('service worker precaches every app file', () => {
   ];
   for (const f of files) assert.ok(sw.includes(`'${f}'`), `sw.js is missing ${f}`);
 });
+
+test('account passwords: hashed with a salt, verified, never stored in plain text', async () => {
+  const { hashPassword, verifyPassword, checkEmail, normalizeEmail, checkNewPassword } = await import('../js/passwords.js');
+  const a = await hashPassword('acm-secret');
+  const b = await hashPassword('acm-secret');
+  assert.notEqual(a.hash, b.hash, 'random salt');
+  assert.equal(JSON.stringify(a).includes('acm-secret'), false);
+  assert.equal(await verifyPassword(a, 'acm-secret'), true);
+  assert.equal(await verifyPassword(a, 'Acm-secret'), false);
+  assert.equal(checkEmail('Someone@Gmail.com '), null);
+  assert.equal(normalizeEmail(' Someone@Gmail.com '), 'someone@gmail.com');
+  assert.notEqual(checkEmail('not-an-email'), null);
+  assert.notEqual(checkNewPassword('123'), null);
+  assert.equal(checkNewPassword('123456'), null);
+});
