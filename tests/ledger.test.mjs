@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   monthSummary, closingBalances, openingInfo, buildClosing, canEdit, canClose, canReopen,
-  validateTx, yearOverview, planTotals, prevMonthId, nextMonthId, monthBounds,
+  validateTx, yearOverview, planTotals, prevMonthId, nextMonthId, monthBounds, findPlanMatch, findTxMatch,
 } from '../js/ledger.js';
 import { defaultSettings, createMonthRecord, missingRecurring, missingUnfinished, migrateData } from '../js/defaults.js';
 import { combinedAll } from '../js/money.js';
@@ -390,4 +390,39 @@ test('random ledgers always satisfy the balance equation per currency', () => {
     assert.equal(sum.closing[c], sum.opening[c] + sum.income[c] - sum.spending[c] + sum.exchange[c] + sum.adjust[c], c);
   }
   assert.equal(sum.all.closing, combinedAll(sum.closing, sum.rates));
+});
+
+test('category budgets: your own planned amount per currency overrides the items total', () => {
+  const s = freshState();
+  const m = addMonth(s, OCT);
+  m.plan.push({ id: 'a', kind: 'expense', categoryId: 'selfcare', listId: 'shoes', description: 'Boots', amount: 900000, currency: 'ALL', paid: false });
+  m.plan.push({ id: 'b', kind: 'expense', categoryId: 'fun', description: 'Concert', amount: 5000, currency: 'EUR', paid: true });
+  assert.deepEqual(planTotals(m).expense, { ALL: 900000, EUR: 5000, USD: 0 });
+  m.categories.find((c) => c.id === 'selfcare').budget = { ALL: 1500000, EUR: 2000, USD: 0 };
+  const t = planTotals(m);
+  assert.deepEqual(t.byCategory.selfcare, { ALL: 1500000, EUR: 2000, USD: 0 });
+  assert.deepEqual(t.expense, { ALL: 1500000, EUR: 7000, USD: 0 }, 'budget replaces the Self-care items, Fun stays');
+  assert.deepEqual(t.unpaid, { ALL: 900000, EUR: 0, USD: 0 }, 'still-to-pay is always item based');
+  addMonth(s, NOV);
+  assert.deepEqual(s.months[NOV].categories.find((c) => c.id === 'selfcare').budget, { ALL: 1500000, EUR: 2000, USD: 0 }, 'budget carried to the next month');
+});
+
+test('matching: a Daily expense finds the unpaid To Buy item it pays (and vice versa)', () => {
+  const s = freshState();
+  const m = addMonth(s, OCT);
+  m.plan.push({ id: 'rent', kind: 'expense', categoryId: 'necessary', description: 'Rent', amount: 3000000, currency: 'ALL', paid: false, txId: null });
+  m.plan.push({ id: 'trip', kind: 'expense', categoryId: 'fun', description: 'Trip to Kosovo', amount: 15000, currency: 'EUR', paid: false, txId: null });
+  m.plan.push({ id: 'sal', kind: 'income', categoryId: null, description: 'Salary', amount: 9000000, currency: 'ALL', paid: false, txId: null });
+  const tx = (o) => ({ monthId: OCT, type: 'expense', currency: 'ALL', amount: 1, description: '', ...o });
+  assert.equal(findPlanMatch(m, tx({ amount: 3000000, description: 'October' }))?.id, 'rent', 'same amount + currency');
+  assert.equal(findPlanMatch(m, tx({ currency: 'EUR', amount: 12000, description: 'kosovo trip bus' }))?.id, undefined, 'name must contain the other');
+  assert.equal(findPlanMatch(m, tx({ currency: 'EUR', amount: 12000, description: 'Trip to Kosovo (bus)' }))?.id, 'trip', 'by name');
+  assert.equal(findPlanMatch(m, tx({ currency: 'EUR', amount: 3000000 })), null, 'different currency never matches');
+  assert.equal(findPlanMatch(m, tx({ type: 'income', amount: 9000000 }))?.id, 'sal');
+  m.plan[0].paid = true;
+  assert.equal(findPlanMatch(m, tx({ amount: 3000000 })), null, 'paid items are not offered');
+  s.transactions.push({ id: 't1', monthId: OCT, type: 'expense', amount: 15000, currency: 'EUR', accountId: 'cash_eur', description: 'bus + hotel', date: '2026-10-10', time: '10:00' });
+  assert.equal(findTxMatch(s, OCT, m.plan[1])?.id, 't1');
+  s.transactions[0].link = { kind: 'plan', monthId: OCT, itemId: 'other' };
+  assert.equal(findTxMatch(s, OCT, m.plan[1]), null, 'already linked transactions are not offered');
 });

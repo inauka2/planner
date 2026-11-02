@@ -150,6 +150,16 @@ export function saveTx(tx, link = null) {
   return write([op.tx(record), ...(link && !existing ? linkOps(link, record.id, true) : [])]);
 }
 
+/** Mark a planned item as paid by an existing transaction (instead of recording it again). */
+export function linkTxToPlan(txId, monthId, planId) {
+  assertOk(canEdit(state, monthId));
+  const t = state.transactions.find((x) => x.id === txId);
+  if (!t) throw new Error('Transaction not found');
+  const record = { ...t, link: { kind: 'plan', monthId, itemId: planId }, updatedAt: nowIso() };
+  state.transactions = state.transactions.map((x) => (x.id === txId ? record : x));
+  return write([op.tx(record), ...linkOps(record.link, txId, true)]);
+}
+
 /** Delete a transaction (and unlink its plan/buy/receivable). Returns an undo function. */
 export async function deleteTx(id) {
   const t = state.transactions.find((x) => x.id === id);

@@ -495,6 +495,17 @@ a.tile:active { transform: scale(0.96); }
 .tile-name { font-size: 15px; font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stats .tile { min-height: 0; padding: 14px; }
 
+.list-hint { padding: 0 4px; }
+.swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; padding: 4px 2px; }
+.swatch { position: relative; display: flex; justify-content: center; }
+.swatch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+.swatch span { width: 38px; height: 38px; border-radius: 50%; background: var(--c); transition: transform 0.25s var(--ease), box-shadow 0.25s; }
+.swatch input:checked + span { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--c); transform: scale(0.9); }
+.sum-col { min-width: 0; }
+.sum-col .big, .sum-col .sub-amt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sum-col .big.neg, .sum-col .sub-amt.neg { color: var(--danger); }
+.row-sub .tag { margin-left: 4px; }
+
 /* inline "New task" line */
 .add-task { min-height: 50px; }
 .check.ghost { border-style: dashed; border-color: var(--text-3); opacity: 0.6; pointer-events: none; }

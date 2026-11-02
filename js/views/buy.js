@@ -1,12 +1,12 @@
 // Tab 3 — To Buy: what I plan to spend money on this month, by category.
 // Root → category → (Self-care) subcategory, iOS-style drill-down.
 import { state, updateMonth, uid } from '../store.js';
-import { monthSummary, planTotals, sourceMonthId, monthLabel } from '../ledger.js';
-import { formatMoney } from '../money.js';
+import { monthSummary, planTotals, sourceMonthId, monthLabel, categoryPlanned } from '../ledger.js';
+import { formatMoney, parseAmount, centsToInput, CURRENCIES } from '../money.js';
 import { SELFCARE_ID, missingRecurring, missingUnfinished } from '../defaults.js';
 import { icon, categoryIcon } from '../icons.js';
-import { esc, registerActions, openSheet, fieldError, toast, checkbox, emptyState, pairText, confirmDialog, moneyStack, shownCurrencies } from '../ui.js';
-import { PRIORITY, doneWord, findCategory } from './plan.js';
+import { esc, registerActions, openSheet, closeSheet, fieldError, toast, checkbox, emptyState, pairText, confirmDialog, moneyStack, shownCurrencies } from '../ui.js';
+import { PRIORITY, doneWord, findCategory, removePlanItem } from './plan.js';
 
 const zero = () => ({ ALL: 0, EUR: 0, USD: 0 });
 
@@ -38,6 +38,7 @@ export function renderBuy(id, path = []) {
 function renderRoot(id, m) {
   const items = expenseItems(m);
   const t = totalsOf(items);
+  t.planned = planTotals(m).expense;
   const closed = !!m.closing;
   const src = sourceMonthId(state, id);
   const recurring = closed ? [] : missingRecurring(state, id).filter((p) => p.kind !== 'income');
@@ -61,6 +62,7 @@ function renderRoot(id, m) {
     <ul class="list card flush">
       ${m.categories.map((c) => {
         const ct = totalsOf(items.filter((p) => p.categoryId === c.id));
+        ct.planned = categoryPlanned(m, c.id);
         const subline = ct.count ? `${ct.count} item${ct.count > 1 ? 's' : ''}${ct.open && ct.open < ct.count ? ` · ${ct.open} left` : ct.open ? '' : ' · all done'}`
           : c.lists?.length ? `${c.lists.length} subcategories` : 'Nothing planned';
         return `<li><a class="row has-icon" href="#/m/${id}/buy/${esc(c.id)}">
@@ -112,13 +114,31 @@ function renderItems(id, m, cat, sub) {
 }
 
 function summaryCard(id, cat, items) {
-  const t = totalsOf(items);
+  const m = state.months[id];
+  const planned = categoryPlanned(m, cat.id);
   const spent = monthSummary(state, id).byCategory[cat.id] || zero();
+  const curs = CURRENCIES.filter((c) => c === 'ALL' || planned[c] || spent[c] || cat.budget?.[c] !== undefined && cat.budget?.[c]);
+  const col = (label, pair, cls = '') => `<div class="sum-col">
+      <p class="eyebrow">${label}</p>
+      ${curs.map((c, i) => `<p class="${i === 0 ? 'big sm' : 'sub-amt'} ${cls}">${i === 0 && c === 'ALL'
+        ? `${formatMoney(pair[c], c).replace(' ALL', '')}<span class="unit">ALL</span>` : formatMoney(pair[c], c)}</p>`).join('')}
+    </div>`;
+  const left = {};
+  curs.forEach((c) => { left[c] = planned[c] - spent[c]; });
+  const over = curs.some((c) => left[c] < 0);
   return `<section class="card">
-    <div class="totals-2">
-      <div><p class="eyebrow">Planned</p><p class="small"><b>${pairText(t.planned, { always: true })}</b></p></div>
-      <div><p class="eyebrow">Spent</p><p class="small"><b>${pairText(spent, { always: true })}</b></p></div>
+    <div class="card-head">
+      <h3>${cat.budget ? 'Your budget' : 'This month'}</h3>
+      ${m.closing ? '' : `<button class="link-btn" data-act="cat-budget" data-month="${id}" data-cat="${esc(cat.id)}">${cat.budget ? 'Edit budget' : 'Set budget'}</button>`}
     </div>
+    <div class="totals-2">
+      ${col(cat.budget ? 'Budget' : 'Planned', planned)}
+      ${col('Spent', spent, over ? 'neg' : '')}
+    </div>
+    <div class="divider"></div>
+    <div class="title-row"><span class="muted small">${over ? 'Over by' : 'Left'}</span>
+      <span class="amount ${over ? 'neg' : ''}">${curs.map((c) => formatMoney(Math.abs(left[c]), c)).join(' · ')}</span></div>
+    ${cat.budget ? '' : '<p class="hint">Planned is the total of the items below — or set your own budget in Lek, Euro or Dollar.</p>'}
   </section>`;
 }
 
@@ -128,6 +148,7 @@ function itemList(id, items) {
   return `<ul class="list card flush">${sorted.map((p) => {
     const meta = [];
     if (p.recurring) meta.push(`${icon('repeat', 'ic-xs')} Monthly`);
+    if (p.taskId && state.months[id].todoLists?.some((l) => l.items.some((t) => t.id === p.taskId))) meta.push(`${icon('tab-todo', 'ic-xs')} From To Do`);
     if (p.priority) meta.push(`<span class="tag prio-${p.priority}">${PRIORITY[p.priority]}</span>`);
     if (p.paid) meta.push(p.txId ? `${doneWord(p)} · recorded` : doneWord(p));
     return `<li class="swipe" ${closed ? '' : 'data-swipe'}>
@@ -160,14 +181,43 @@ function nameSheet({ title, value, placeholder, onSave, onDelete, deleteLabel })
 }
 
 registerActions({
-  'plan-swipe-delete': async (el) => {
-    const { month: id, id: itemId } = el.dataset;
-    const idx = state.months[id].plan.findIndex((x) => x.id === itemId);
-    const p = state.months[id].plan[idx];
-    if (!p) return;
-    await updateMonth(id, (mm) => { mm.plan = mm.plan.filter((x) => x.id !== itemId); }, { financial: true });
-    toast('Removed', { actionLabel: 'Undo', onAction: () => updateMonth(id, (mm) => { mm.plan.splice(idx, 0, p); }, { financial: true }) });
+  'cat-budget': (el) => {
+    const { month: id, cat: catId } = el.dataset;
+    const cat = findCategory(state.months[id], catId);
+    const items = planTotals(state.months[id]).itemsByCategory[catId] || zero();
+    openSheet({
+      title: `${cat.name} budget`,
+      body: `<p class="hint">How much you plan to spend on ${esc(cat.name)} this month, in each currency you use. Leave all empty to use the total of your items.</p>
+        ${CURRENCIES.map((c) => `<label class="field field-inline"><span class="label">${c}</span>
+          <input class="input input-right" name="b_${c}" inputmode="decimal" placeholder="${items[c] ? centsToInput(items[c]) : '0'}" value="${cat.budget?.[c] ? centsToInput(cat.budget[c]) : ''}"></label>`).join('')}
+        ${cat.budget ? '<button type="button" class="btn btn-danger-ghost" data-act="budget-clear">Use the items total instead</button>' : ''}`,
+      actions: {
+        'budget-clear': async () => {
+          await updateMonth(id, (mm) => { delete findCategory(mm, catId).budget; }, { financial: true });
+          closeSheet();
+          toast('Budget removed');
+        },
+      },
+      onSubmit: async (form) => {
+        const budget = {};
+        for (const c of CURRENCIES) {
+          const v = form[`b_${c}`].value.trim();
+          if (!v) continue;
+          const p = parseAmount(v, { allowZero: true });
+          if (!p.ok) return fieldError(form, `b_${c}`, p.error);
+          budget[c] = p.cents;
+        }
+        const empty = !Object.values(budget).some(Boolean);
+        await updateMonth(id, (mm) => {
+          const c = findCategory(mm, catId);
+          if (empty) delete c.budget;
+          else c.budget = budget;
+        }, { financial: true });
+        toast(empty ? 'Using the items total' : 'Budget saved');
+      },
+    });
   },
+  'plan-swipe-delete': (el) => removePlanItem(el.dataset.month, el.dataset.id),
   'buy-copy-recurring': async (el) => {
     const id = el.dataset.month;
     const items = missingRecurring(state, id).filter((p) => p.kind !== 'income');
@@ -181,7 +231,8 @@ registerActions({
       for (const p of items) {
         const cat = mm.categories.find((c) => c.id === p.categoryId);
         if (!cat) mm.categories.push({ id: p.categoryId, name: findCategory(state.months[sourceMonthId(state, id)], p.categoryId)?.name || 'Other' });
-        mm.plan.push({ ...p, id: uid(), paid: false, txId: null });
+        const { taskId: _t, ...rest } = p;
+        mm.plan.push({ ...rest, id: uid(), paid: false, txId: null });
       }
     }, { financial: true });
     toast(`Brought ${items.length} over`);

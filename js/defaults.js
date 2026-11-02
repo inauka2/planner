@@ -51,8 +51,11 @@ const LIST_STYLE = {
 const CUSTOM_COLORS = ['#30d158', '#ac8e68', '#64d2ff', '#ff453a', '#ffd60a'];
 export function listStyle(list, index = 0) {
   const [color, icon] = LIST_STYLE[list.id] || [CUSTOM_COLORS[index % CUSTOM_COLORS.length], 'list-other'];
-  return { color, icon };
+  return { color: list.color || color, icon };
 }
+
+/** Colours offered when editing a list (iOS system palette). */
+export const LIST_COLORS = ['#ff453a', '#ff9f0a', '#ffd60a', '#30d158', '#30c7be', '#64d2ff', '#0a84ff', '#5e5ce6', '#bf5af2', '#ff375f', '#ac8e68', '#8e8e93'];
 
 export function defaultSettings() {
   return {
@@ -84,7 +87,11 @@ export function normalizeSettings(s) {
 }
 
 const copyCategories = (cats) =>
-  cats.map((c) => ({ id: c.id, name: c.name, ...(c.lists ? { lists: c.lists.map((l) => ({ id: l.id, name: l.name })) } : {}) }));
+  cats.map((c) => ({
+    id: c.id, name: c.name,
+    ...(c.budget ? { budget: { ...c.budget } } : {}),
+    ...(c.lists ? { lists: c.lists.map((l) => ({ id: l.id, name: l.name })) } : {}),
+  }));
 
 /**
  * Create a new month. Category headings (and Self-care subcategories) and to-do lists are
@@ -105,8 +112,8 @@ export function createMonthRecord(state, id, makeId, now = new Date().toISOStrin
     categories: copyCategories(src?.categories?.length ? src.categories : DEFAULT_CATEGORIES),
     plan: (src?.plan || [])
       .filter((p) => p.recurring)
-      .map((p) => ({ ...p, id: makeId(), paid: false, txId: null })),
-    todoLists: (src?.todoLists?.length ? src.todoLists : DEFAULT_TODO_LISTS).map((l) => ({ id: l.id, name: l.name, items: [] })),
+      .map(({ taskId: _t, ...p }) => ({ ...p, id: makeId(), paid: false, txId: null })),
+    todoLists: (src?.todoLists?.length ? src.todoLists : DEFAULT_TODO_LISTS).map((l) => ({ id: l.id, name: l.name, ...(l.color ? { color: l.color } : {}), items: [] })),
   };
 }
 

@@ -1,9 +1,9 @@
 // Add / edit transaction sheet: Expense, Income, Transfer. Kept deliberately minimal:
 // a new expense needs only an amount (with currency) and a description.
-import { state, saveTx, deleteTx, saveSettings, uid } from '../store.js';
+import { state, saveTx, deleteTx, saveSettings, uid, linkTxToPlan } from '../store.js';
 import { parseAmount, centsToInput, convertCents, formatMoney, formatRate, CURRENCIES } from '../money.js';
-import { canEdit, monthBounds, localDateParts, getRates, accountById } from '../ledger.js';
-import { openSheet, closeSheet, fieldError, toast, esc, segmented, confirmDialog } from '../ui.js';
+import { canEdit, monthBounds, localDateParts, getRates, accountById, findPlanMatch } from '../ledger.js';
+import { openSheet, closeSheet, fieldError, toast, esc, segmented, confirmDialog, chooseDialog } from '../ui.js';
 import { openAccountSheet } from './accounts.js';
 import { ACCOUNT_KINDS } from '../defaults.js';
 
@@ -151,6 +151,7 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
       };
       await saveTx(record, link);
       rememberDefaults(t, currency, accountId);
+      if (!editing && !link) setTimeout(() => offerPlanLink(record), 380); // after this sheet has closed
       toast(editing ? 'Saved' : `${t === 'expense' ? 'Expense' : 'Income'} added · ${formatMoney(amt.cents, currency)}`);
       onSaved?.(record);
     },
@@ -169,6 +170,27 @@ function rememberDefaults(type, currency, accountId) {
     lastCurrency: currency,
     defaultAccounts: { ...da, [key]: { ...da[key], [currency]: accountId } },
   }).catch(() => {});
+}
+
+/** Just-added expense/income matches something planned and unpaid? Offer to link it (counted once). */
+async function offerPlanLink(tx) {
+  const m = state.months[tx.monthId];
+  const p = m && findPlanMatch(m, tx);
+  if (!p) return;
+  const where = p.kind === 'income' ? 'Expected income' : 'To Buy';
+  const choice = await chooseDialog({
+    title: `Is this “${p.description}”?`,
+    message: `You planned it in ${where}${p.amount ? ` (${formatMoney(p.amount, p.currency)})` : ''}. Linking marks it ${p.kind === 'income' ? 'received' : 'paid'} there — the money is still counted only once.`,
+    options: [
+      { key: 'link', primary: true, label: `Yes, mark “${p.description}” as ${p.kind === 'income' ? 'received' : 'paid'}` },
+      { key: 'no', label: 'No, it’s something else' },
+    ],
+  });
+  if (choice !== 'link') return;
+  try {
+    await linkTxToPlan(tx.id, tx.monthId, p.id);
+    toast(`Linked to “${p.description}”`);
+  } catch (e) { toast(e.message); }
 }
 
 // ---------- transfer ----------

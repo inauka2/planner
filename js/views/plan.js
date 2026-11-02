@@ -1,13 +1,13 @@
 // Planned items: things to buy / bills to pay (To Buy tab) and expected income (Budget tab).
 // A planned item never counts as spending. Ticking it offers to record a real transaction.
-import { state, updateMonth, uid, deleteTx } from '../store.js';
-import { canEdit, monthLabel, accountById } from '../ledger.js';
+import { state, updateMonth, uid, deleteTx, linkTxToPlan } from '../store.js';
+import { canEdit, monthLabel, accountById, findTxMatch } from '../ledger.js';
 import { parseAmount, formatMoney, centsToInput } from '../money.js';
 import { BILL_CATEGORIES, SELFCARE_ID } from '../defaults.js';
 import { icon } from '../icons.js';
 import {
   esc, registerActions, openSheet, fieldError, toast, currencySeg, segmented, switchRow,
-  confirmDialog, chooseDialog,
+  confirmDialog, chooseDialog, dayLabel,
 } from '../ui.js';
 import { openTxSheet, defaultAccount } from './txsheet.js';
 
@@ -134,9 +134,7 @@ export function openPlanItem(id, itemId) {
       'plan-delete': async () => {
         const ok = await confirmDialog({ title: 'Remove this item?', message: `“${esc(p.description)}” is removed from ${monthLabel(id)} only.${p.txId ? ' The recorded transaction stays.' : ''}`, confirmLabel: 'Remove', danger: true });
         if (!ok) return;
-        const idx = state.months[id].plan.findIndex((x) => x.id === p.id);
-        await updateMonth(id, (mm) => { mm.plan = mm.plan.filter((x) => x.id !== p.id); }, { financial: true });
-        toast('Removed', { actionLabel: 'Undo', onAction: () => updateMonth(id, (mm) => { mm.plan.splice(idx, 0, p); }, { financial: true }) });
+        await removePlanItem(id, p.id);
       },
     },
     onSubmit: async (form) => {
@@ -148,7 +146,7 @@ export function openPlanItem(id, itemId) {
   });
 }
 
-function recordPlan(id, p) {
+export function recordPlan(id, p) {
   openTxSheet({
     monthId: id, type: p.kind,
     prefill: { amount: p.amount || undefined, currency: p.currency, description: p.description, accountId: defaultAccount(p.kind, p.currency), categoryId: p.categoryId },
@@ -181,15 +179,33 @@ export async function tickPlan(id, p) {
     return;
   }
   const acc = defaultAccount(p.kind, p.currency);
+  const match = findTxMatch(state, id, p);
   const choice = await chooseDialog({
     title: `${word[0].toUpperCase() + word.slice(1)}: ${p.description}`,
+    message: match ? 'This looks like it is already in Daily. Link it so it is counted only once.' : '',
     options: [
-      { key: 'record', primary: true, label: `Record ${isIncome ? 'income' : 'expense'}${p.amount ? ` of ${formatMoney(p.amount, p.currency)}` : ''}`, hint: `${isIncome ? 'Into' : 'From'} ${accountById(state, acc)?.name ?? '—'} · you can adjust it` },
+      ...(match ? [{ key: 'link', primary: true, label: `Link to “${match.description}” in Daily`, hint: `${formatMoney(match.amount, match.currency)} · ${dayLabel(match.date)} — already recorded` }] : []),
+      { key: 'record', primary: !match, primary: true, label: `Record ${isIncome ? 'income' : 'expense'}${p.amount ? ` of ${formatMoney(p.amount, p.currency)}` : ''}`, hint: `${isIncome ? 'Into' : 'From'} ${accountById(state, acc)?.name ?? '—'} · you can adjust it` },
       { key: 'mark', label: `Just mark as ${word}`, hint: 'If you already added it in Daily — so it isn’t counted twice' },
     ],
   });
-  if (choice === 'record') recordPlan(id, p);
+  if (choice === 'link') {
+    await linkTxToPlan(match.id, id, p.id);
+    toast(`Linked — counted once`);
+  } else if (choice === 'record') recordPlan(id, p);
   else if (choice === 'mark') await updateMonth(id, (mm) => { mm.plan.find((q) => q.id === p.id).paid = true; }, { financial: true });
+}
+
+/** Remove a planned item (and its link from a To Do task), with Undo. */
+export async function removePlanItem(id, planId) {
+  const idx = state.months[id].plan.findIndex((x) => x.id === planId);
+  const p = state.months[id].plan[idx];
+  if (!p) return;
+  const setTaskLink = (mm, value) => {
+    for (const l of mm.todoLists || []) for (const it of l.items) if (it.id === p.taskId) it.planId = value;
+  };
+  await updateMonth(id, (mm) => { mm.plan = mm.plan.filter((x) => x.id !== planId); setTaskLink(mm, undefined); }, { financial: true });
+  toast('Removed', { actionLabel: 'Undo', onAction: () => updateMonth(id, (mm) => { mm.plan.splice(idx, 0, p); setTaskLink(mm, p.id); }, { financial: true }) });
 }
 
 registerActions({

@@ -71,9 +71,18 @@ function renderMonth(r) {
     </div>`;
 }
 
+// Pages animate in only when opened from inside the app. When iOS's own swipe-back gesture
+// (or the browser back button) navigates, iOS already animates — a second animation flickers.
+let navIntent = false;
+document.addEventListener('click', (e) => { if (e.target.closest('a[href^="#"]')) navIntent = true; }, true);
+window.addEventListener('popstate', () => { setTimeout(() => { navIntent = false; }, 0); });
+
 /** Which entrance animation fits this navigation. */
 function transitionFor(r) {
   if (!last) return 'enter';
+  const fromTap = navIntent;
+  navIntent = false;
+  if (!fromTap && (last.name !== r.name || JSON.stringify(last) !== JSON.stringify(r))) return 'none';
   if (last.name !== r.name) return 'enter';
   if (r.name === 'month') {
     if (last.id !== r.id || last.tab !== r.tab) return 'enter';
@@ -108,7 +117,7 @@ export async function render() {
   }
   app.innerHTML = html;
   document.body.dataset.screen = r.name;
-  if (motionClass) app.querySelector('.content')?.classList.add(motionClass);
+  if (motionClass && motionClass !== 'none') app.querySelector('.content')?.classList.add(motionClass);
   window.scrollTo(0, motionClass ? 0 : y);
   if (r.name === 'home' && motionClass) document.querySelector('.month-card.now')?.scrollIntoView({ block: 'center' });
   setupCarousels(motionClass !== null);

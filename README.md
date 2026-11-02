@@ -109,6 +109,11 @@ Don't use "Remove from Home Screen" or Settings → Safari → Clear History and
 - **Closing balance** = opening balance + the month's transactions.
 - **Closing a month** (Summary → Review & close): confirm or type each real balance. Any difference is saved as a *correction*, which is never spending. The month's exchange rate is stored with the closing. The next month's opening balances come from the confirmed closing, so no money is counted twice.
 - A closed month is read-only for money. To change it, reopen it. Months must be reopened newest first and closed oldest first, so balances always chain correctly.
+- **One job per page, so nothing is counted twice:** *To Buy* is the plan, *Daily* is the real money (the only place spending is counted), *To Do* is tasks.
+  - A To Do task can have a **cost** (e.g. "Trip to Kosovo — €150"): it is stored once, as a planned item in To Buy, and shown on both pages.
+  - Adding an expense in Daily that matches something unpaid in To Buy asks *"Is this …?"* — yes links them (marked paid, counted once).
+  - Ticking a To Buy item that's already in Daily offers *"Link to … in Daily"* instead of recording it again.
+- **Category budgets:** in To Buy, open a category and *Set budget* in Lek, Euro and/or Dollar; otherwise Planned is the total of its items.
 - **To Buy items** are a plan, not spending. Ticking one asks whether to *record the expense* or *just mark it* (if you already added it in Daily), so nothing is counted twice.
 - New months automatically get the same categories and lists, plus your **recurring** items (bills, subscriptions, salary), marked as *not paid*. *To Buy* and *To Do* can bring over unfinished items from the previous month.
 - Data saved by version 1.0 is converted automatically on first launch: shopping lists become Self-care subcategories, and the unused default "Savings" account is removed. You can add a savings account in Settings at any time.

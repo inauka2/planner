@@ -220,24 +220,64 @@ export function yearOverview(state, year) {
 }
 
 // ---------- plan ----------
+/**
+ * Planned totals. A spending category's planned amount is its own budget when you set one
+ * (per currency), otherwise the sum of its items.
+ */
 export function planTotals(month) {
   const expense = zero();
   const income = zero();
   const unpaid = zero();
   const notReceived = zero();
-  const byCategory = {};
+  const itemsByCategory = {};
   for (const p of month.plan || []) {
     if (!p.amount) continue; // things to buy may have no estimated price
     if (p.kind === 'income') {
       income[p.currency] += p.amount;
       if (!p.paid) notReceived[p.currency] += p.amount;
     } else {
-      expense[p.currency] += p.amount;
       if (!p.paid) unpaid[p.currency] += p.amount;
-      (byCategory[p.categoryId] ??= zero())[p.currency] += p.amount;
+      (itemsByCategory[p.categoryId] ??= zero())[p.currency] += p.amount;
     }
   }
-  return { expense, income, unpaid, notReceived, byCategory };
+  const byCategory = {};
+  for (const [catId, items] of Object.entries(itemsByCategory)) byCategory[catId] = items;
+  for (const c of month.categories || []) if (c.budget) byCategory[c.id] = budgetPair(c.budget);
+  for (const pair of Object.values(byCategory)) for (const cur of Object.keys(expense)) expense[cur] += pair[cur] || 0;
+  return { expense, income, unpaid, notReceived, byCategory, itemsByCategory };
+}
+
+const budgetPair = (b) => ({ ALL: b.ALL || 0, EUR: b.EUR || 0, USD: b.USD || 0 });
+
+/** Planned amount of one category (budget if set, else its items). */
+export function categoryPlanned(month, catId) {
+  return planTotals(month).byCategory[catId] || zero();
+}
+
+// ---------- matching planned items and real transactions (prevents counting twice) ----------
+const norm = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+/** An unpaid planned item that this new transaction is probably paying for. */
+export function findPlanMatch(month, tx) {
+  const kind = tx.type === 'income' ? 'income' : tx.type === 'expense' ? 'expense' : null;
+  if (!kind) return null;
+  const open = (month.plan || []).filter((p) => (p.kind === 'income' ? 'income' : 'expense') === kind && !p.paid && !p.txId && p.currency === tx.currency);
+  const exact = open.find((p) => p.amount === tx.amount);
+  if (exact) return exact;
+  const d = norm(tx.description);
+  if (d.length < 3) return null;
+  return open.find((p) => { const n = norm(p.description); return n.length >= 3 && (d.includes(n) || n.includes(d)); }) || null;
+}
+
+/** A transaction already in Daily that this planned item was probably paid with. */
+export function findTxMatch(state, monthId, p) {
+  const type = p.kind === 'income' ? 'income' : 'expense';
+  const linked = new Set((state.months[monthId]?.plan || []).map((x) => x.txId).filter(Boolean));
+  const txs = monthTxs(state, monthId).filter((t) => t.type === type && !t.link && !linked.has(t.id) && t.currency === p.currency);
+  const n = norm(p.description);
+  return txs.find((t) => p.amount && t.amount === p.amount)
+    || (n.length >= 3 ? txs.find((t) => { const d = norm(t.description); return d.length >= 3 && (d.includes(n) || n.includes(d)); }) : null)
+    || null;
 }
 
 // ---------- guards (keep closed months consistent) ----------
