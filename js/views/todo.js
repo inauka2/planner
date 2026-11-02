@@ -1,85 +1,127 @@
-// Tab 4 — To Do: checklists (Projects, Activities & Fun, German Learning, …) with optional deadlines.
+// Tab 4 — To Do, like iOS Reminders: a grid of list tiles; tapping one opens the list,
+// where tasks are typed one after another in the "New task" line.
 import { state, updateMonth, uid, saveSettings } from '../store.js';
 import { sourceMonthId, monthLabel, localDateParts } from '../ledger.js';
 import { icon } from '../icons.js';
-import { ACTIVITIES_LIST_ID } from '../defaults.js';
+import { ACTIVITIES_LIST_ID, listStyle } from '../defaults.js';
 import { esc, registerActions, openSheet, fieldError, toast, checkbox, confirmDialog, chooseDialog, shortDate } from '../ui.js';
 
 const findList = (m, listId) => m.todoLists.find((l) => l.id === listId);
-const unfinished = (m) => m.todoLists.reduce((n, l) => n + l.items.filter((it) => !it.done).length, 0);
+const openCount = (l) => l.items.filter((it) => !it.done).length;
+const unfinished = (m) => m.todoLists.reduce((n, l) => n + openCount(l), 0);
 
-export function renderTodo(id) {
+export function renderTodo(id, path = []) {
   const m = state.months[id];
-  const today = localDateParts().date;
+  const l = path[0] && findList(m, path[0]);
+  return l ? renderList(id, m, l) : renderGrid(id, m);
+}
+
+// ---------- grid of lists ----------
+function renderGrid(id, m) {
   const open = unfinished(m);
   const total = m.todoLists.reduce((n, l) => n + l.items.length, 0);
-  const overdue = m.todoLists.reduce((n, l) => n + l.items.filter((it) => !it.done && it.deadline && it.deadline < today).length, 0);
   const src = sourceMonthId(state, id);
   const carry = src ? unfinished(state.months[src]) : 0;
+  const today = localDateParts().date;
+  const overdue = m.todoLists.reduce((n, l) => n + l.items.filter((it) => !it.done && it.deadline && it.deadline < today).length, 0);
 
   return `
-    <h1 class="large-title">To Do</h1>
-    <section class="card hero">
-      <div class="totals-2">
-        <div><p class="eyebrow">Open</p><p class="big sm">${open}</p></div>
-        <div><p class="eyebrow">Done</p><p class="big sm">${total - open}</p></div>
-      </div>
-      ${overdue ? `<p class="hint warn">${overdue} past the deadline</p>` : ''}
-    </section>
+    <div>
+      <h1 class="large-title">To Do</h1>
+      <p class="title-sub">${open} open${total - open ? ` · ${total - open} done` : ''}${overdue ? ` · <span class="warn">${overdue} overdue</span>` : ''}</p>
+    </div>
     ${carry && total === 0 ? `<button class="btn btn-tinted btn-block" data-act="todo-carry" data-month="${id}">${icon('repeat')} Bring ${carry} unfinished from ${monthLabel(src).split(' ')[0]}</button>` : ''}
-    ${m.todoLists.map((l) => listCard(id, l, today)).join('')}
+    <div class="tile-grid">
+      ${m.todoLists.map((l, i) => {
+        const { color, icon: ic } = listStyle(l, i);
+        return `<a class="tile" href="#/m/${id}/todo/${esc(l.id)}" style="--c:${color}">
+          <span class="tile-top"><span class="tile-icon">${icon(ic)}</span><span class="tile-count">${openCount(l)}</span></span>
+          <span class="tile-name">${esc(l.name)}</span>
+        </a>`;
+      }).join('')}
+    </div>
     <div class="title-row">
       <button class="text-btn" data-act="todo-list-add" data-month="${id}">${icon('plus')} New list</button>
       ${carry && total > 0 ? `<button class="text-btn" data-act="todo-carry" data-month="${id}">${icon('repeat')} Bring unfinished</button>` : ''}
     </div>`;
 }
 
-function listCard(id, l, today) {
-  const done = l.items.filter((it) => it.done).length;
-  const sorted = [...l.items].sort((a, b) => Number(a.done) - Number(b.done));
-  return `<section class="card">
-    <div class="card-head">
-      <button class="title-row" style="background:none;border:0;padding:0;gap:8px" data-act="todo-list-menu" data-month="${id}" data-list="${esc(l.id)}">
-        <h3>${esc(l.name)}</h3>${l.items.length ? `<span class="muted small">${done}/${l.items.length}</span>` : ''}
-      </button>
-      <button class="plain-btn accent" data-act="todo-add" data-month="${id}" data-list="${esc(l.id)}" aria-label="Add to ${esc(l.name)}">${icon('plus')}</button>
+// ---------- one list ----------
+export function taskRow(id, l, it, today = localDateParts().date) {
+  const late = !it.done && it.deadline && it.deadline < today;
+  return `<li class="swipe" data-swipe>
+    <div class="row has-check swipe-content">
+      ${checkbox(!!it.done, 'todo-tick', `data-month="${id}" data-list="${esc(l.id)}" data-id="${esc(it.id)}"`, 'Done', { id: it.id })}
+      <div class="row-main tappable" data-act="todo-open" data-month="${id}" data-list="${esc(l.id)}" data-id="${esc(it.id)}">
+        <span class="row-title ${it.done ? 'done' : ''}">${esc(it.text)}</span>
+        ${it.deadline ? `<span class="row-sub ${late ? 'warn' : ''}">${icon('calendar', 'ic-xs')} ${late ? 'Was due' : 'By'} ${shortDate(it.deadline)}</span>` : ''}
+      </div>
+    </div>
+    <button class="swipe-del" data-act="todo-delete" data-month="${id}" data-list="${esc(l.id)}" data-id="${esc(it.id)}">Delete</button>
+  </li>`;
+}
+
+function renderList(id, m, l) {
+  const i = m.todoLists.indexOf(l);
+  const { color } = listStyle(l, i);
+  const open = l.items.filter((it) => !it.done);
+  const done = l.items.filter((it) => it.done);
+  const today = localDateParts().date;
+  return `
+    <a class="back-link" href="#/m/${id}/todo">${icon('chev-left')} To Do</a>
+    <div class="title-row">
+      <h1 class="large-title" style="color:${color}">${esc(l.name)}</h1>
+      <button class="glass-btn sm" data-act="todo-list-menu" data-month="${id}" data-list="${esc(l.id)}" aria-label="Rename or delete list">${icon('edit')}</button>
     </div>
     ${l.id === ACTIVITIES_LIST_ID ? ideasRow(id) : ''}
-    ${l.items.length ? `<ul class="list">${sorted.map((it) => {
-      const late = !it.done && it.deadline && it.deadline < today;
-      return `<li class="row has-check">
-        ${checkbox(!!it.done, 'todo-tick', `data-month="${id}" data-list="${esc(l.id)}" data-id="${esc(it.id)}"`, 'Done', { id: it.id })}
-        <div class="row-main tappable" data-act="todo-open" data-month="${id}" data-list="${esc(l.id)}" data-id="${esc(it.id)}">
-          <span class="row-title ${it.done ? 'done' : ''}">${esc(it.text)}</span>
-          ${it.deadline ? `<span class="row-sub ${late ? 'warn' : ''}">${icon('calendar', 'ic-xs')} ${late ? 'was due' : 'by'} ${shortDate(it.deadline)}</span>` : ''}
-        </div>
-      </li>`;
-    }).join('')}</ul>` : ''}
-  </section>`;
+    <ul class="list card flush" data-task-list="${esc(l.id)}" style="--c:${color}">
+      ${open.map((it) => taskRow(id, l, it, today)).join('')}
+      <li class="row has-check add-task">
+        <span class="check ghost" aria-hidden="true"></span>
+        <input class="inline-input" data-new-task data-month="${id}" data-list="${esc(l.id)}" placeholder="New task" enterkeyhint="next" autocomplete="off" maxlength="120">
+      </li>
+    </ul>
+    ${done.length ? `<p class="section-label"><span>Completed</span><span>${done.length}</span></p>
+      <ul class="list card flush">${done.map((it) => taskRow(id, l, it, today)).join('')}</ul>` : ''}
+    <p class="hint center">Type a task and press return to add the next one. Swipe left to delete.</p>`;
 }
 
 function ideasRow(id) {
-  return `<div class="ideas"><div class="chips">
+  return `<div class="chips">
     ${state.settings.activityIdeas.map((idea, i) => `<button class="chip" data-act="idea-open" data-month="${id}" data-i="${i}">${esc(idea)}</button>`).join('')}
     <button class="chip chip-add" data-act="idea-add">${icon('plus')} Idea</button>
-  </div></div>`;
+  </div>`;
 }
 
-function taskForm(it) {
-  return `<label class="field"><span class="label">Task</span>
-      <input class="input" name="text" maxlength="120" value="${esc(it?.text ?? '')}" placeholder="What do you want to do?" ${it ? '' : 'autofocus'}></label>
-    <label class="field"><span class="label">Deadline <span class="optional">optional</span></span>
-      <input class="input" type="date" name="deadline" value="${esc(it?.deadline ?? '')}"></label>`;
+// ---------- quick add (no page redraw, so the keyboard stays up) ----------
+async function addInline(input) {
+  const text = input.value.trim();
+  if (!text) return;
+  const { month: id, list } = input.dataset;
+  const it = { id: uid(), text, deadline: null, done: false };
+  input.value = '';
+  await updateMonth(id, (mm) => { findList(mm, list).items.push(it); }, { silent: true });
+  const l = findList(state.months[id], list);
+  input.closest('li').insertAdjacentHTML('beforebegin', taskRow(id, l, it));
 }
 
-function readTask(form) {
-  const text = form.text.value.trim();
-  if (!text) return fieldError(form, 'text', 'Describe the task');
-  return { text, deadline: form.deadline.value || null };
-}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || !e.target.matches('[data-new-task]')) return;
+  e.preventDefault();
+  addInline(e.target).catch((err) => toast(err.message));
+});
+document.addEventListener('focusout', (e) => {
+  if (e.target.matches?.('[data-new-task]') && e.target.value.trim()) addInline(e.target).catch((err) => toast(err.message));
+});
 
-/** Add-task sheet. Without a listId (from the + button) the user picks the list. */
+/** + button: on a list page jump into the "New task" line; on the grid ask which list. */
 export function addTaskSheet(id, listId = null) {
+  const inline = document.querySelector('[data-new-task]');
+  if (inline) {
+    inline.focus();
+    inline.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
   const lists = state.months[id].todoLists;
   if (!lists.length) return toast('Create a list first');
   const l = listId && findList(state.months[id], listId);
@@ -98,10 +140,23 @@ export function addTaskSheet(id, listId = null) {
   });
 }
 
+function taskForm(it) {
+  return `<label class="field"><span class="label">Task</span>
+      <input class="input" name="text" maxlength="120" value="${esc(it?.text ?? '')}" placeholder="What do you want to do?" ${it ? '' : 'autofocus'}></label>
+    <label class="field"><span class="label">Deadline <span class="optional">optional</span></span>
+      <input class="input" type="date" name="deadline" value="${esc(it?.deadline ?? '')}"></label>`;
+}
+
+function readTask(form) {
+  const text = form.text.value.trim();
+  if (!text) return fieldError(form, 'text', 'Describe the task');
+  return { text, deadline: form.deadline.value || null };
+}
+
 function nameSheet(title, value, onSave, extra = {}) {
   openSheet({
     title,
-    body: `<label class="field"><span class="label">List name</span><input class="input" name="label" maxlength="40" value="${esc(value)}" autofocus></label>${extra.body || ''}`,
+    body: `<label class="field"><span class="label">List name</span><input class="input" name="label" maxlength="40" value="${esc(value)}" ${value ? '' : 'autofocus'}></label>${extra.body || ''}`,
     actions: extra.actions || {},
     onSubmit: async (form) => {
       const name = form.label.value.trim();
@@ -111,25 +166,29 @@ function nameSheet(title, value, onSave, extra = {}) {
   });
 }
 
+async function deleteTask(id, list, taskId) {
+  const l = findList(state.months[id], list);
+  const idx = l.items.findIndex((x) => x.id === taskId);
+  const it = l.items[idx];
+  if (!it) return;
+  await updateMonth(id, (mm) => { const ll = findList(mm, list); ll.items = ll.items.filter((x) => x.id !== taskId); });
+  toast('Task deleted', { actionLabel: 'Undo', onAction: () => updateMonth(id, (mm) => { findList(mm, list).items.splice(idx, 0, it); }) });
+}
+
 registerActions({
-  'todo-add': (el) => addTaskSheet(el.dataset.month, el.dataset.list),
   'todo-tick': (el) => {
     const { month: id, list } = el.dataset;
     return updateMonth(id, (mm) => { const x = findList(mm, list).items.find((q) => q.id === el.dataset.id); if (x) x.done = !x.done; });
   },
+  'todo-delete': (el) => deleteTask(el.dataset.month, el.dataset.list, el.dataset.id),
   'todo-open': (el) => {
     const { month: id, list } = el.dataset;
     const it = findList(state.months[id], list)?.items.find((x) => x.id === el.dataset.id);
     if (!it) return;
     openSheet({
       title: 'Task',
-      body: taskForm(it) + '<button type="button" class="btn btn-danger-ghost" data-act="todo-delete">Delete task</button>',
-      actions: {
-        'todo-delete': async () => {
-          await updateMonth(id, (mm) => { const l = findList(mm, list); l.items = l.items.filter((x) => x.id !== it.id); });
-          toast('Deleted', { actionLabel: 'Undo', onAction: () => updateMonth(id, (mm) => { findList(mm, list).items.push(it); }) });
-        },
-      },
+      body: taskForm(it) + '<button type="button" class="btn btn-danger-ghost" data-act="todo-sheet-delete">Delete task</button>',
+      actions: { 'todo-sheet-delete': () => deleteTask(id, list, it.id) },
       onSubmit: async (form) => {
         const v = readTask(form);
         if (!v) return false;
@@ -139,7 +198,11 @@ registerActions({
   },
   'todo-list-add': (el) => {
     const id = el.dataset.month;
-    nameSheet('New list', '', (name) => updateMonth(id, (mm) => { mm.todoLists.push({ id: uid(), name, items: [] }); }));
+    nameSheet('New list', '', async (name) => {
+      const listId = uid();
+      await updateMonth(id, (mm) => { mm.todoLists.push({ id: listId, name, items: [] }); });
+      location.hash = `#/m/${id}/todo/${listId}`;
+    });
   },
   'todo-list-menu': (el) => {
     const { month: id, list } = el.dataset;
@@ -154,6 +217,7 @@ registerActions({
           }
           const idx = state.months[id].todoLists.findIndex((x) => x.id === l.id);
           await updateMonth(id, (mm) => { mm.todoLists = mm.todoLists.filter((x) => x.id !== l.id); });
+          location.hash = `#/m/${id}/todo`;
           toast('List deleted', { actionLabel: 'Undo', onAction: () => updateMonth(id, (mm) => { mm.todoLists.splice(idx, 0, l); }) });
         },
       },

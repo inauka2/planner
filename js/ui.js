@@ -33,6 +33,63 @@ export function dispatch(el, ev) {
   }
 }
 
+// ---------- swipe left to delete (iOS list rows) ----------
+// Markup: <li class="swipe" data-swipe><div class="swipe-content">…</div><button class="swipe-del" data-act="…">Delete</button></li>
+const SWIPE_OPEN = -86;
+let swipe = null;
+let swallowClick = false;
+
+function closeSwipes(except = null) {
+  document.querySelectorAll('.swipe.open').forEach((r) => {
+    if (r === except) return;
+    r.classList.remove('open');
+    r.querySelector('.swipe-content').style.transform = '';
+  });
+}
+
+document.addEventListener('pointerdown', (e) => {
+  const row = e.target.closest('[data-swipe]');
+  if (!e.target.closest('.swipe-del')) closeSwipes(row);
+  if (!row || e.pointerType === 'mouse' || e.target.closest('.swipe-del')) { swipe = null; return; }
+  swipe = { row, x: e.clientX, y: e.clientY, base: row.classList.contains('open') ? SWIPE_OPEN : 0, dx: 0, active: false };
+});
+document.addEventListener('pointermove', (e) => {
+  if (!swipe) return;
+  const dx = e.clientX - swipe.x;
+  const dy = e.clientY - swipe.y;
+  if (!swipe.active) {
+    if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) { swipe = null; return; }
+    if (Math.abs(dx) < 8) return;
+    swipe.active = true;
+    swipe.row.classList.add('dragging');
+  }
+  swipe.dx = Math.max(-140, Math.min(0, swipe.base + dx));
+  swipe.row.querySelector('.swipe-content').style.transform = `translateX(${swipe.dx}px)`;
+});
+function endSwipe() {
+  if (!swipe) return;
+  const { row, active, dx } = swipe;
+  swipe = null;
+  if (!active) return;
+  row.classList.remove('dragging');
+  const open = dx < SWIPE_OPEN / 2;
+  row.classList.toggle('open', open);
+  row.querySelector('.swipe-content').style.transform = open ? `translateX(${SWIPE_OPEN}px)` : '';
+  swallowClick = true;
+  setTimeout(() => { swallowClick = false; }, 350);
+}
+document.addEventListener('pointerup', endSwipe);
+document.addEventListener('pointercancel', () => {
+  if (swipe?.active) endSwipe();
+  else swipe = null;
+});
+// a swipe gesture must not also "tap" the row underneath
+document.addEventListener('click', (e) => {
+  if (swallowClick) { e.stopPropagation(); e.preventDefault(); return; }
+  const open = e.target.closest('.swipe.open');
+  if (open && !e.target.closest('.swipe-del')) { e.stopPropagation(); e.preventDefault(); closeSwipes(); }
+}, true);
+
 // ---------- bottom sheet ----------
 let lastFocus = null;
 
@@ -49,7 +106,7 @@ export function openSheet({ title, body, submitLabel = 'Save', onSubmit = null, 
   const root = document.getElementById('sheet-root');
   const wasOpen = root.classList.contains('open') && !root.classList.contains('closing');
   sheetToken++;
-  if (!wasOpen) { lastFocus = document.activeElement; lockPageScroll(); }
+  if (!wasOpen) lastFocus = document.activeElement;
   sheetActions = { 'sheet-close': () => closeSheet(), ...acts };
   const primary = onSubmit ? `<button class="btn btn-primary" type="submit">${esc(submitLabel)}</button>` : '';
   root.innerHTML = `
@@ -98,8 +155,32 @@ export function openSheet({ title, body, submitLabel = 'Save', onSubmit = null, 
   });
   onOpen?.(form);
   const auto = form.querySelector('[autofocus]');
-  if (auto) auto.focus({ preventScroll: true });
+  if (auto) {
+    if (wasOpen) auto.focus({ preventScroll: true });
+    else {
+      // Open the keyboard right away (it must happen inside the tap) using an off-screen field,
+      // then hand focus to the real field once the sheet has slid in — no jump, no page scroll.
+      primeKeyboard(auto);
+      const token = sheetToken;
+      setTimeout(() => { if (token === sheetToken && document.contains(auto)) auto.focus({ preventScroll: true }); }, 380);
+    }
+  }
   return form;
+}
+
+function primeKeyboard(target) {
+  if (!matchMedia('(pointer: coarse)').matches) return;
+  let p = document.getElementById('kb-proxy');
+  if (!p) {
+    p = document.createElement('input');
+    p.id = 'kb-proxy';
+    p.setAttribute('aria-hidden', 'true');
+    p.tabIndex = -1;
+    document.body.appendChild(p);
+  }
+  p.setAttribute('inputmode', target.getAttribute('inputmode') || 'text');
+  p.type = target.type === 'password' ? 'password' : 'text';
+  p.focus({ preventScroll: true });
 }
 
 let sheetToken = 0;
@@ -108,15 +189,13 @@ let sheetToken = 0;
 // iOS doesn't shrink the page when the keyboard opens, it only shrinks the "visual viewport".
 // The sheet layer follows the visual viewport, so the sheet sits right above the keyboard
 // and the page underneath never has to scroll.
-let scrollLockY = 0;
-function lockPageScroll() {
-  scrollLockY = window.scrollY;
-  Object.assign(document.body.style, { position: 'fixed', top: `-${scrollLockY}px`, left: '0', right: '0' });
-}
-function unlockPageScroll() {
-  Object.assign(document.body.style, { position: '', top: '', left: '', right: '' });
-  window.scrollTo(0, scrollLockY);
-}
+// Nothing behind an open sheet may scroll: block touch scrolling outside the sheet's own
+// scrollable body (and inside it when it has nothing to scroll).
+document.addEventListener('touchmove', (e) => {
+  if (!document.body.classList.contains('sheet-open')) return;
+  const body = e.target.closest?.('.sheet-body');
+  if (!body || body.scrollHeight <= body.clientHeight) e.preventDefault();
+}, { passive: false });
 
 function syncViewport() {
   const root = document.getElementById('sheet-root');
@@ -146,7 +225,6 @@ export function closeSheet() {
   root.classList.add('closing');
   document.body.classList.remove('sheet-open');
   document.activeElement?.blur?.();
-  unlockPageScroll();
   if (lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
   const done = () => {
     if (token !== sheetToken) return; // a new sheet opened meanwhile

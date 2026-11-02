@@ -1,10 +1,10 @@
 // Tab 2 — Daily: today / this month at a glance, then every transaction grouped by day.
 // New entries come from the + button.
-import { state } from '../store.js';
-import { monthSummary, monthTxs, localDateParts, accountById } from '../ledger.js';
+import { state, deleteTx } from '../store.js';
+import { monthSummary, monthTxs, localDateParts, accountById, canEdit } from '../ledger.js';
 import { formatMoney } from '../money.js';
 import { icon } from '../icons.js';
-import { esc, registerActions, emptyState, dayLabel, pairText, moneyStack, shownCurrencies } from '../ui.js';
+import { esc, registerActions, emptyState, dayLabel, pairText, moneyStack, shownCurrencies, toast } from '../ui.js';
 import { openTxSheet } from './txsheet.js';
 
 
@@ -70,14 +70,22 @@ function txRow(t) {
     amount = formatMoney(-t.amount, t.currency);
     ic = 'expense';
   }
-  return `<li class="row tappable tx tx-${t.type}" data-act="tx-open" data-id="${esc(t.id)}">
-    <span class="tx-ic">${icon(ic)}</span>
-    <div class="row-main"><span class="row-title">${esc(t.description)}</span><span class="row-sub">${t.time} · ${sub}</span></div>
-    <span class="amount">${amount}</span>
+  const locked = !canEdit(state, t.monthId).ok;
+  return `<li class="swipe tx-li" ${locked ? '' : 'data-swipe'}>
+    <div class="row tappable tx tx-${t.type} swipe-content" data-act="tx-open" data-id="${esc(t.id)}">
+      <span class="tx-ic">${icon(ic)}</span>
+      <div class="row-main"><span class="row-title">${esc(t.description)}</span><span class="row-sub">${t.time} · ${sub}</span></div>
+      <span class="amount">${amount}</span>
+    </div>
+    ${locked ? '' : `<button class="swipe-del" data-act="tx-swipe-delete" data-id="${esc(t.id)}">Delete</button>`}
   </li>`;
 }
 
 registerActions({
+  'tx-swipe-delete': async (el) => {
+    const undo = await deleteTx(el.dataset.id);
+    toast('Deleted', { actionLabel: 'Undo', onAction: undo });
+  },
   'tx-open': (el) => {
     const tx = state.transactions.find((t) => t.id === el.dataset.id);
     if (tx) openTxSheet({ monthId: tx.monthId, tx });

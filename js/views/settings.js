@@ -1,14 +1,15 @@
 // Settings — accounts, default exchange rate, backup / restore, CSV, install help.
-import { state, saveSettings, setRates, uid, backupObject, restoreFrom, undoRestore, markBackedUp } from '../store.js';
+import { state, setRates, ensureMonth, backupObject, restoreFrom, undoRestore, markBackedUp } from '../store.js';
 import { parseRate, formatRate } from '../money.js';
 import { validateBackup, toCsv, saveFile } from '../backup.js';
 import { ACCOUNT_KINDS } from '../defaults.js';
 import { icon } from '../icons.js';
-import { esc, registerActions, actions, openSheet, fieldError, toast, confirmDialog, segmented, currencySeg } from '../ui.js';
+import { esc, registerActions, actions, openSheet, fieldError, toast, confirmDialog } from '../ui.js';
 import { localDateParts } from '../ledger.js';
 import { changePasswordSheet } from './lockscreen.js';
+import { openAccountSheet } from './accounts.js';
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 let persisted = null;
 
 export function renderSettings() {
@@ -33,6 +34,7 @@ export function renderSettings() {
         </li>`).join('')}
         <li class="row tappable" data-act="acc-add"><span class="accent">${icon('plus', 'ic-xs')} Add account</span></li>
       </ul>
+      <p class="hint" style="padding:0 16px">Add each account once. A balance you type here applies to the current month.</p>
 
       <p class="section-label"><span>Security</span></p>
       <ul class="list card flush">
@@ -78,58 +80,18 @@ export function renderSettings() {
     </main>`;
 }
 
-const isUsed = (accId) =>
-  state.transactions.some((t) => t.accountId === accId || t.toAccountId === accId) ||
-  Object.values(state.months).some((m) => m.openingBalances?.[accId] || m.closing?.balances?.[accId]);
-
-function accountForm(a) {
-  const used = a && isUsed(a.id);
-  return `
-    <label class="field"><span class="label">Name</span><input class="input" name="accName" maxlength="40" value="${esc(a?.name ?? '')}" placeholder="e.g. Revolut" ${a ? '' : 'autofocus'}></label>
-    <div class="field"><span class="label">Type</span>${segmented('kind', Object.entries(ACCOUNT_KINDS), a?.kind ?? 'bank')}</div>
-    <div class="field"><span class="label">Currency</span>
-      ${used ? `<p class="small"><b>${a.currency}</b> <span class="hint">— can’t change once the account has money recorded</span></p>` : currencySeg(a?.currency ?? 'ALL')}</div>
-    ${a ? `<label class="check-line"><input type="checkbox" name="archived" ${a.archived ? 'checked' : ''}> Hide from forms (keeps its history)</label>` : ''}
-    ${a && !used ? `<button type="button" class="btn btn-danger-ghost" data-act="acc-delete">Delete account</button>` : ''}`;
-}
-
 registerActions({
   'pw-change': () => changePasswordSheet(),
-  'acc-add': () => openSheet({
-    title: 'New account',
-    body: accountForm(null),
-    submitLabel: 'Add account',
-    onSubmit: async (form) => {
-      const name = form.accName.value.trim();
-      if (!name) return fieldError(form, 'accName', 'Name the account');
-      await saveSettings({ accounts: [...state.settings.accounts, { id: uid(), name, kind: form.kind.value, currency: form.currency.value }] });
-      toast('Account added');
-    },
-  }),
-  'acc-open': (el) => {
+  'acc-add': async () => {
+    const monthId = localDateParts().monthId;
+    await ensureMonth(monthId);
+    openAccountSheet({ monthId });
+  },
+  'acc-open': async (el) => {
+    const monthId = localDateParts().monthId;
+    await ensureMonth(monthId);
     const a = state.settings.accounts.find((x) => x.id === el.dataset.id);
-    if (!a) return;
-    openSheet({
-      title: 'Account',
-      body: accountForm(a),
-      actions: {
-        'acc-delete': async () => {
-          const ok = await confirmDialog({ title: `Delete ${esc(a.name)}?`, message: 'It has no recorded money, so nothing else changes.', confirmLabel: 'Delete', danger: true });
-          if (!ok) return;
-          await saveSettings({ accounts: state.settings.accounts.filter((x) => x.id !== a.id) });
-          toast('Account deleted');
-        },
-      },
-      onSubmit: async (form) => {
-        const name = form.accName.value.trim();
-        if (!name) return fieldError(form, 'accName', 'Name the account');
-        const currency = form.currency?.value ?? a.currency;
-        await saveSettings({
-          accounts: state.settings.accounts.map((x) => (x.id === a.id ? { ...x, name, kind: form.kind.value, currency, archived: form.archived.checked } : x)),
-        });
-        toast('Saved');
-      },
-    });
+    if (a) openAccountSheet({ account: a, monthId });
   },
   'defrate-edit': () => openSheet({
     title: 'Exchange rates',

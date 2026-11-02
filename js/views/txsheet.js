@@ -1,9 +1,10 @@
 // Add / edit transaction sheet: Expense, Income, Transfer. Kept deliberately minimal:
 // a new expense needs only an amount (with currency) and a description.
 import { state, saveTx, deleteTx, saveSettings, uid } from '../store.js';
-import { parseAmount, centsToInput, convertCents, formatMoney, formatRate } from '../money.js';
+import { parseAmount, centsToInput, convertCents, formatMoney, formatRate, CURRENCIES } from '../money.js';
 import { canEdit, monthBounds, localDateParts, getRates, accountById } from '../ledger.js';
-import { openSheet, closeSheet, fieldError, toast, esc, segmented, currencySeg, confirmDialog } from '../ui.js';
+import { openSheet, closeSheet, fieldError, toast, esc, segmented, confirmDialog } from '../ui.js';
+import { openAccountSheet } from './accounts.js';
 import { ACCOUNT_KINDS } from '../defaults.js';
 
 export const accountsFor = (currency) => state.settings.accounts.filter((a) => a.currency === currency && !a.archived);
@@ -61,11 +62,22 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
   if (!guard(monthId)) return;
   const t = tx ? tx.type : type;
   if (t === 'adjust') return openAdjustmentInfo(tx);
-  if (t === 'transfer') return openTransferSheet({ monthId, tx, prefill });
+  const active = state.settings.accounts.filter((a) => !a.archived);
+  if (!tx && !active.length) {
+    toast('First add an account to pay from');
+    return openAccountSheet({ monthId });
+  }
+  if (t === 'transfer') {
+    if (!tx && active.length < 2) return toast('Add a second account to move money between accounts');
+    return openTransferSheet({ monthId, tx, prefill });
+  }
 
   const editing = !!tx;
   const month = state.months[monthId];
-  const cur = tx?.currency ?? prefill.currency ?? state.settings.lastCurrency ?? 'ALL';
+  const held = CURRENCIES.filter((c) => accountsFor(c).length);
+  const last = state.settings.lastCurrency;
+  const cur = tx?.currency ?? prefill.currency ?? (held.includes(last) ? last : held[0] ?? 'ALL');
+  const curs = CURRENCIES.filter((c) => held.includes(c) || c === cur);
   const acc = tx?.accountId ?? prefill.accountId ?? defaultAccount(t, cur);
   const amountText = tx ? centsToInput(tx.amount) : prefill.amountText ?? (prefill.amount ? centsToInput(prefill.amount) : '');
   const dt = tx ? { date: tx.date, time: tx.time } : defaultDateTime(monthId);
@@ -77,7 +89,8 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
       <label class="field grow"><span class="label">Amount</span>
         <input class="input input-amount" name="amount" inputmode="decimal" enterkeyhint="next" placeholder="0" value="${esc(amountText)}" ${editing ? '' : 'autofocus'}>
       </label>
-      <div class="field">${currencySeg(cur)}</div>
+      <div class="field">${curs.length > 1 ? segmented('currency', curs.map((c) => [c, c]), cur, { cls: 'seg-cur' })
+        : `<input type="hidden" name="currency" value="${cur}"><span class="cur-static">${cur}</span>`}</div>
     </div>
     <label class="field"><span class="label">${t === 'expense' ? 'What was it for?' : 'Where is it from?'}</span>
       <input class="input" name="description" maxlength="120" enterkeyhint="done"
@@ -126,7 +139,7 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
       if (!amt.ok) return fieldError(form, 'amount', amt.error);
       const currency = form.currency.value;
       const accountId = form.account.value;
-      if (!accountId) return fieldError(form, 'account', `Add a ${currency} account in Settings first`);
+      if (!accountId) return fieldError(form, 'account', `You have no ${currency} account yet — add one in Budget`);
       const description = form.description.value.trim() || (t === 'expense' ? 'Expense' : 'Income');
       const date = form.date?.value || dt.date;
       const time = form.time?.value || dt.time;

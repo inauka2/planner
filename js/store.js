@@ -48,7 +48,7 @@ export async function load() {
     state.transactions = data.transactions;
     state.hasRestorePoint = !!kvMap.restorePoint;
     state.lock = kvMap.lock || null;
-    state.signedIn = kvMap.session?.signedIn === true;
+    state.signedIn = kvMap.session?.signedIn === true || (!!kvMap.lock && signedInMirror());
     state.storageError = null;
   } catch (e) {
     console.error(e);
@@ -57,8 +57,8 @@ export async function load() {
 }
 
 /** Optimistically update UI, then persist. On failure, reload what is really stored. */
-async function write(ops) {
-  emit();
+async function write(ops, { silent = false } = {}) {
+  if (!silent) emit();
   try {
     await db.batch(ops);
   } catch (e) {
@@ -110,12 +110,12 @@ export async function ensureMonth(id) {
 }
 
 /** Mutate a copy of a month. `financial` changes are blocked on closed months. */
-export function updateMonth(id, mutate, { financial = false } = {}) {
+export function updateMonth(id, mutate, { financial = false, silent = false } = {}) {
   if (financial) assertOk(canEdit(state, id));
   const m = clone(state.months[id]);
   mutate(m);
   state.months[id] = m;
-  return write([op.month(m)]);
+  return write([op.month(m)], { silent });
 }
 
 // ---------- transactions ----------
@@ -241,12 +241,20 @@ export async function saveLock(lock) {
 
 /** Signed in once = stays signed in on this device until "Log out". */
 export async function setSignedIn(signedIn) {
-  await db.batch([{ store: 'kv', value: { key: 'session', value: { signedIn } } }]);
   state.signedIn = signedIn;
+  try { localStorage.setItem(SIGNED_IN_KEY, signedIn ? '1' : '0'); } catch { /* private mode */ }
+  await db.batch([{ store: 'kv', value: { key: 'session', value: { signedIn } } }]);
+}
+
+// A second, independent record of "signed in" so the login form really appears only once.
+const SIGNED_IN_KEY = 'planner.signedIn';
+function signedInMirror() {
+  try { return localStorage.getItem(SIGNED_IN_KEY) === '1'; } catch { return false; }
 }
 
 /** Forgotten password: wipe everything on this device (a backup can be restored afterwards). */
 export async function eraseAll() {
+  try { localStorage.removeItem(SIGNED_IN_KEY); } catch { /* ignore */ }
   await db.replaceAll({ kv: [], months: [], transactions: [] });
   await load();
 }

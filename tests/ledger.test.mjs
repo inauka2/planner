@@ -11,9 +11,17 @@ let n = 0;
 const makeId = () => `id${++n}`;
 const NOW = '2026-10-31T20:00:00.000Z';
 
+const ACCOUNTS = [
+  { id: 'bank1', name: 'Bank account 1', currency: 'ALL', kind: 'bank' },
+  { id: 'bank2', name: 'Bank account 2', currency: 'EUR', kind: 'bank' },
+  { id: 'cash_all', name: 'Cash ALL', currency: 'ALL', kind: 'cash' },
+  { id: 'cash_eur', name: 'Cash EUR', currency: 'EUR', kind: 'cash' },
+  { id: 'cash_usd', name: 'Cash USD', currency: 'USD', kind: 'cash' },
+  { id: 'savings', name: 'Savings', currency: 'EUR', kind: 'savings' },
+];
 function freshState() {
   const settings = defaultSettings();
-  settings.accounts.push({ id: 'savings', name: 'Savings', currency: 'EUR', kind: 'savings' });
+  settings.accounts = ACCOUNTS.map((a) => ({ ...a }));
   return { settings, months: {}, transactions: [], receivables: [] };
 }
 function addMonth(state, id, patch = {}) {
@@ -246,7 +254,7 @@ test('editing an open month is blocked when the next carried month is closed', (
 });
 
 test('validateTx rejects currency/account mismatches and bad transfers', () => {
-  const { accounts } = defaultSettings();
+  const accounts = ACCOUNTS;
   const base = { monthId: OCT, date: '2026-10-05', time: '10:00', amount: 100 };
   assert.match(validateTx({ ...base, type: 'expense', currency: 'EUR', accountId: 'bank1' }, accounts), /holds ALL/);
   assert.match(validateTx({ ...base, type: 'expense', currency: 'ALL', accountId: 'bank1', date: '2026-11-01' }, accounts), /inside this month/);
@@ -298,7 +306,7 @@ test('migration from v1: buy lists become Self-care items, old categories are fo
     todoLists: [],
   };
   const tx = { id: 't1', monthId: OCT, type: 'expense', amount: 900000, currency: 'ALL', accountId: 'cash_all', date: '2026-10-02', time: '10:00', categoryId: 'shopping', link: { kind: 'buy', monthId: OCT, listId: 'shoes', itemId: 'b1' } };
-  const { data, changed } = migrateData({ settings: { ...defaultSettings(), schema: 1, accounts: [...defaultSettings().accounts, { id: 'savings', name: 'Savings', currency: 'EUR', kind: 'savings' }] }, months: [v1Month], transactions: [tx] });
+  const { data, changed } = migrateData({ settings: { ...defaultSettings(), schema: 1, accounts: ACCOUNTS.filter((a) => a.id !== 'cash_usd') }, months: [v1Month], transactions: [tx] });
   assert.equal(changed, true);
   const m = data.months[0];
   assert.deepEqual(m.categories.map((c) => c.id), ['necessary', 'subscriptions', 'selfcare', 'fun', 'other', 'pets']);
@@ -311,7 +319,7 @@ test('migration from v1: buy lists become Self-care items, old categories are fo
   assert.deepEqual(data.transactions[0].link, { kind: 'plan', monthId: OCT, itemId: 'b1' });
   assert.equal(data.transactions[0].categoryId, 'other');
   assert.equal(data.settings.accounts.some((a) => a.id === 'savings'), false, 'unused Savings account removed');
-  assert.equal(data.settings.accounts.some((a) => a.currency === 'USD'), true, 'USD account added');
+  assert.deepEqual(data.settings.accounts.map((a) => a.id), ['cash_all'], 'only the used ready-made account is kept');
   assert.equal(data.settings.usdRate > 0, true);
   assert.equal(migrateData(data).changed, false, 'migration is idempotent');
 });
@@ -346,6 +354,16 @@ test('US dollars: separate balance, converted with their own rate, carried over 
   addMonth(s, NOV);
   assert.equal(s.months[NOV].usdRate, 91);
   assert.equal(openingInfo(s, NOV).balances.cash_usd, 2500);
+});
+
+test('migration v3 → v4: untouched ready-made accounts removed, used or renamed ones kept', () => {
+  const settings = { ...defaultSettings(), schema: 3, accounts: ACCOUNTS.map((a) => (a.id === 'bank2' ? { ...a, name: 'Raiffeisen' } : { ...a })),
+    defaultAccounts: { expense: { ALL: 'cash_all', EUR: 'cash_eur' }, income: { ALL: 'bank1' } } };
+  const months = [{ id: OCT, openingBalances: { bank1: 5000 }, plan: [], categories: [], todoLists: [] }];
+  const { data } = migrateData({ settings, months, transactions: [] });
+  assert.deepEqual(data.settings.accounts.map((a) => a.id), ['bank1', 'bank2', 'savings']);
+  assert.deepEqual(data.settings.defaultAccounts, { expense: {}, income: { ALL: 'bank1' } });
+  assert.equal(defaultSettings().accounts.length, 0, 'new installs start without accounts');
 });
 
 test('random ledgers always satisfy the balance equation per currency', () => {

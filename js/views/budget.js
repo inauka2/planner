@@ -1,14 +1,15 @@
 // Tab 1 — Budget: my current finances only. Balances (Lek and Euro), money owed to me,
 // expected income, and planned vs actual spending.
-import { state, updateMonth, saveTx, saveReceivable, deleteReceivable, uid } from '../store.js';
-import { monthSummary, planTotals, canEdit, sourceMonthId, monthLabel, monthTxs, txEffects } from '../ledger.js';
-import { parseAmount, formatMoney, centsToInput, CURRENCIES } from '../money.js';
+import { state, updateMonth, saveReceivable, deleteReceivable, uid } from '../store.js';
+import { monthSummary, planTotals, canEdit, sourceMonthId, monthLabel } from '../ledger.js';
+import { parseAmount, formatMoney, centsToInput, CURRENCIES, CURRENCY_NAMES } from '../money.js';
 import { icon } from '../icons.js';
 import {
   esc, registerActions, openSheet, fieldError, toast, checkbox, currencySeg, confirmDialog, segmented, moneyStack, shownCurrencies, pairText,
 } from '../ui.js';
-import { openTxSheet, defaultAccount, defaultDateTime } from './txsheet.js';
+import { openTxSheet, defaultAccount } from './txsheet.js';
 import { doneWord } from './plan.js';
+import { openAccountSheet, setBalances } from './accounts.js';
 
 /** "158,650" + unit, for the big totals. */
 function bigAmount(cents, cur) {
@@ -33,6 +34,16 @@ export function renderBudget(id) {
 // ---------- balances ----------
 function balancesCard(id, sum, closed) {
   const accs = state.settings.accounts.filter((a) => !a.archived || sum.closingBalances[a.id]);
+  if (!accs.length) {
+    return `<section class="card hero">
+      <div class="card-head"><h2>Balances</h2></div>
+      <div class="empty">
+        <p class="empty-title">Add your accounts</p>
+        <p class="empty-text">Your bank accounts, cash and savings — each in its own currency.</p>
+        ${closed ? '' : `<button class="btn btn-primary" data-act="acc-new" data-month="${id}">Add account</button>`}
+      </div>
+    </section>`;
+  }
   return `<section class="card hero">
     <div class="card-head">
       <h2>Balances</h2>
@@ -40,48 +51,27 @@ function balancesCard(id, sum, closed) {
         : `<button class="glass-btn sm" data-act="balances-edit" data-month="${id}" aria-label="Edit balances">${icon('edit')}</button>`}
     </div>
     <div class="totals-2">
-      <div><p class="eyebrow">Lek</p><p class="big ${sum.closing.ALL < 0 ? 'neg' : ''}">${bigAmount(sum.closing.ALL, 'ALL')}</p></div>
-      <div><p class="eyebrow">Euro</p><p class="big ${sum.closing.EUR < 0 ? 'neg' : ''}">${bigAmount(sum.closing.EUR, 'EUR')}</p></div>
-      ${sum.closing.USD ? `<div><p class="eyebrow">Dollar</p><p class="big ${sum.closing.USD < 0 ? 'neg' : ''}">${bigAmount(sum.closing.USD, 'USD')}</p></div>` : ''}
+      ${['ALL', 'EUR', 'USD'].filter((c) => c === 'ALL' || sum.closing[c] || accs.some((a) => a.currency === c)).map((c) => `
+        <div><p class="eyebrow">${CURRENCY_NAMES[c]}</p><p class="big ${sum.closing[c] < 0 ? 'neg' : ''}">${bigAmount(sum.closing[c], c)}</p></div>`).join('')}
     </div>
     <div class="divider"></div>
     <ul class="list">
-      ${accs.map((a) => `<li class="row">
+      ${accs.map((a) => `<li class="row ${closed ? '' : 'tappable'}" ${closed ? '' : `data-act="acc-open" data-id="${esc(a.id)}" data-month="${id}"`}>
         <div class="row-main"><span class="row-title">${esc(a.name)}</span></div>
         <span class="amount ${sum.closingBalances[a.id] < 0 ? 'neg' : ''}">${formatMoney(sum.closingBalances[a.id] || 0, a.currency)}</span>
       </li>`).join('')}
+      ${closed ? '' : `<li class="row tappable" data-act="acc-new" data-month="${id}"><span class="accent">${icon('plus', 'ic-xs')} Add account</span></li>`}
     </ul>
   </section>`;
 }
 
-/** Make each account show `target`: edit the opening if nothing else moved it, otherwise record a correction. */
-async function applyBalances(id, targets) {
-  const m = state.months[id];
-  const sum = monthSummary(state, id);
-  const touched = new Set();
-  for (const t of monthTxs(state, id)) for (const [acc] of txEffects(t)) touched.add(acc);
-  const opening = { ...(m.openingBalances || {}) };
-  let openingChanged = false;
-  const corrections = [];
-  for (const [accId, target] of Object.entries(targets)) {
-    const diff = target - (sum.closingBalances[accId] || 0);
-    if (!diff) continue;
-    const acc = state.settings.accounts.find((a) => a.id === accId);
-    if (m.openingMode === 'manual' && !touched.has(accId)) {
-      opening[accId] = target;
-      openingChanged = true;
-    } else {
-      const dt = defaultDateTime(id);
-      corrections.push({
-        id: uid(), monthId: id, type: 'adjust', amount: diff, currency: acc.currency, accountId: accId,
-        description: 'Balance update', date: dt.date, time: dt.time, createdAt: new Date().toISOString(),
-      });
-    }
-  }
-  if (openingChanged) await updateMonth(id, (mm) => { mm.openingBalances = opening; }, { financial: true });
-  for (const c of corrections) await saveTx(c);
-  return openingChanged || corrections.length > 0;
-}
+registerActions({
+  'acc-new': (el) => openAccountSheet({ monthId: el.dataset.month }),
+  'acc-open': (el) => {
+    const a = state.settings.accounts.find((x) => x.id === el.dataset.id);
+    if (a) openAccountSheet({ account: a, monthId: el.dataset.month });
+  },
+});
 
 registerActions({
   'balances-edit': (el) => {
@@ -103,7 +93,7 @@ registerActions({
           if (!p.ok) return fieldError(form, `b_${a.id}`, p.error);
           targets[a.id] = p.cents;
         }
-        const changed = await applyBalances(id, targets);
+        const changed = await setBalances(id, targets);
         toast(changed ? 'Balances updated' : 'No changes');
       },
     });

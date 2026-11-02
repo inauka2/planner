@@ -5,7 +5,13 @@ import { makeBackup, validateBackup, toCsv } from '../js/backup.js';
 import { defaultSettings, createMonthRecord } from '../js/defaults.js';
 
 function sample() {
-  const state = { settings: defaultSettings(), months: {}, transactions: [], receivables: [] };
+  const settings = defaultSettings();
+  settings.accounts = [
+    { id: 'bank1', name: 'Bank account 1', currency: 'ALL', kind: 'bank' },
+    { id: 'bank2', name: 'Bank account 2', currency: 'EUR', kind: 'bank' },
+    { id: 'cash_all', name: 'Cash ALL', currency: 'ALL', kind: 'cash' },
+  ];
+  const state = { settings, months: {}, transactions: [], receivables: [] };
   state.months['2026-10'] = createMonthRecord(state, '2026-10', () => 'x');
   state.months['2026-10'].rate = 97;
   state.transactions.push(
@@ -23,7 +29,7 @@ test('backup round-trips through JSON and validation', () => {
   assert.equal(res.ok, true);
   assert.equal(res.data.transactions.length, 3);
   assert.equal(res.data.months[0].id, '2026-10');
-  assert.equal(res.data.settings.accounts.length, 5);
+  assert.equal(res.data.settings.accounts.length, 3);
 });
 
 test('validation rejects foreign or corrupted files', () => {

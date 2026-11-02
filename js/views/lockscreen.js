@@ -30,15 +30,15 @@ export function lockGate() {
 
 function setupScreen(done) {
   screen(`
-    <h1>Create a password</h1>
-    <p class="hint center">You’ll stay signed in on this device until you log out. The password is saved only here.</p>
+    <h1>Welcome to Planner</h1>
+    <p class="hint center">Create a password to sign in. You only do this once — Planner stays signed in on this iPhone until you log out.</p>
     <form class="lock-form" novalidate>
       <input class="input" type="password" name="pw" placeholder="Password" autocomplete="new-password" autofocus>
       <input class="input" type="password" name="pw2" placeholder="Repeat password" autocomplete="new-password">
       <p class="field-error" data-err hidden></p>
-      <button class="btn btn-primary btn-block" type="submit">Continue</button>
+      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
     </form>
-    <p class="hint center">If you forget it, the only way back in is to erase this device’s data and restore a backup.</p>`);
+    <p class="hint center">The password is kept only on this device. If you forget it, you can erase this device’s data and restore a backup.</p>`);
   const form = root().querySelector('form');
   form.pw.focus();
   form.addEventListener('submit', async (e) => {

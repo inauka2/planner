@@ -5,13 +5,14 @@ An installable, offline-first web app (PWA) for iPhone. Dark mode, no account, n
 
 - **Home:** year selector and 12 month cards.
 - **Each month:**
-  - **Budget:** balances in Lek and Euro (✎ to edit), Owed to me, Expected income, Planned vs actual.
+  - **Budget:** your accounts and balances (you add each account yourself: name, currency, type, current balance), Owed to me, Expected income, Planned vs actual.
   - **Daily:** today and this month at a glance, plus every transaction grouped by day.
   - **To Buy:** Necessary bills, Online Subscriptions, Self-care (with subcategories Clothes, Shoes, Hair, Skincare, Face, Body, Technology, Other), Fun & Social, Other.
-  - **To Do:** checklists.
-  - **Summary:** money flow, spending by category, the year at a glance, and month closing.
+  - **To Do:** coloured list tiles, like iOS Reminders. Open a list and type tasks one after another; swipe left to delete.
+  - **Summary:** month status and closing, an overview (started with / ends with / income / spent), spending by category, and a year chart you swipe sideways to change year.
+- Rows in Daily, To Buy and To Do can be **swiped left to delete** (with Undo).
 - The green **+** next to the tab bar always adds the right thing for the page you're on.
-- **Currencies:** ALL, EUR and USD are kept separate (one currency per account; a "Cash USD" account is included). The exchange rates (Settings: 1 EUR = x ALL, 1 USD = x ALL) are only used for the "≈ ALL" figures in Summary and on the month cards, and are saved with each closed month.
+- **Currencies:** ALL, EUR and USD are kept separate (one currency per account). The exchange rates (Settings: 1 EUR = x ALL, 1 USD = x ALL) are only used for the "≈ ALL" figures in Summary and on the month cards, and are saved with each closed month.
 
 ## Tech
 
@@ -71,7 +72,7 @@ Cloudflare Pages and Vercel (static, no framework) work the same way.
 
 ## Password
 
-The first time Planner opens on a device, it asks you to create a password. You then **stay signed in on that device** until you choose *Settings → Security → Log out*. After logging out, the password is needed to open Planner again. *Change password* is in the same place.
+The first time Planner opens on a device, a one-time sign-in form asks you to create a password. You then **stay signed in on that device**, even after closing the app, until you choose *Settings → Security → Log out*. After logging out, the password is needed to open Planner again. *Change password* is in the same place.
 
 - The password is never written in the code or sent anywhere. Only a salted PBKDF2 hash is kept on the device, and it's never included in backups.
 - It locks the app's screens. It is not encryption of the stored data.

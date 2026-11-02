@@ -1,18 +1,19 @@
 // Default accounts, categories and lists, the month template, and data migrations.
 import { sourceMonthId } from './ledger.js';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 export const DEFAULT_RATE = 97; // 1 EUR = 97 ALL — edit it in Settings to match today's rate
 export const DEFAULT_USD_RATE = 90; // 1 USD = 90 ALL — edit it in Settings
 
-export const DEFAULT_ACCOUNTS = [
+// Accounts are created by the user. These were the ready-made accounts of versions ≤ 1.3;
+// they are only used to recognise (and remove) untouched leftovers when migrating.
+export const LEGACY_DEFAULT_ACCOUNTS = [
   { id: 'bank1', name: 'Bank account 1', currency: 'ALL', kind: 'bank' },
   { id: 'bank2', name: 'Bank account 2', currency: 'EUR', kind: 'bank' },
   { id: 'cash_all', name: 'Cash ALL', currency: 'ALL', kind: 'cash' },
   { id: 'cash_eur', name: 'Cash EUR', currency: 'EUR', kind: 'cash' },
   { id: 'cash_usd', name: 'Cash USD', currency: 'USD', kind: 'cash' },
 ];
-const USD_ACCOUNT = DEFAULT_ACCOUNTS.find((a) => a.id === 'cash_usd');
 
 export const ACCOUNT_KINDS = { bank: 'Bank', cash: 'Cash', savings: 'Savings' };
 
@@ -41,16 +42,25 @@ export const DEFAULT_TODO_LISTS = [
 
 export const ACTIVITIES_LIST_ID = 'activities';
 
+/** Colour and icon of each to-do list (custom lists get a colour by position). */
+const LIST_STYLE = {
+  projects: ['#0a84ff', 'list-projects'], activities: ['#ff9f0a', 'list-activities'], selfdev: ['#bf5af2', 'list-selfdev'],
+  health: ['#ff375f', 'list-health'], german: ['#5e5ce6', 'list-german'], spiritual: ['#30c7be', 'list-spiritual'],
+  other: ['#8e8e93', 'list-other'],
+};
+const CUSTOM_COLORS = ['#30d158', '#ac8e68', '#64d2ff', '#ff453a', '#ffd60a'];
+export function listStyle(list, index = 0) {
+  const [color, icon] = LIST_STYLE[list.id] || [CUSTOM_COLORS[index % CUSTOM_COLORS.length], 'list-other'];
+  return { color, icon };
+}
+
 export function defaultSettings() {
   return {
     schema: SCHEMA_VERSION,
-    accounts: DEFAULT_ACCOUNTS.map((a) => ({ ...a })),
+    accounts: [],
     defaultRate: DEFAULT_RATE,
     usdRate: DEFAULT_USD_RATE,
-    defaultAccounts: {
-      expense: { ALL: 'cash_all', EUR: 'cash_eur', USD: 'cash_usd' },
-      income: { ALL: 'bank1', EUR: 'bank2', USD: 'cash_usd' },
-    },
+    defaultAccounts: { expense: {}, income: {} },
     lastCurrency: 'ALL',
     activityIdeas: [],
     lastBackupAt: null,
@@ -64,7 +74,7 @@ export function normalizeSettings(s) {
   return {
     ...d,
     ...s,
-    accounts: Array.isArray(s.accounts) && s.accounts.length ? s.accounts : d.accounts,
+    accounts: Array.isArray(s.accounts) ? s.accounts : d.accounts,
     defaultAccounts: {
       expense: { ...d.defaultAccounts.expense, ...(s.defaultAccounts?.expense || {}) },
       income: { ...d.defaultAccounts.income, ...(s.defaultAccounts?.income || {}) },
@@ -168,11 +178,22 @@ export function migrateData({ settings, months, transactions, receivables }) {
       months.some((m) => m.openingBalances?.savings || m.closing?.balances?.savings);
     if (!used) s.accounts = s.accounts.filter((a) => a.id !== 'savings');
   }
-  if (settings && (settings.schema ?? 1) < 3) {
+  if (settings && (settings.schema ?? 1) < 4) {
     changed = true;
-    // v3 adds US dollars: give the user a USD cash account if they have no USD account yet.
-    if (!s.accounts.some((a) => a.currency === 'USD') && !s.accounts.some((a) => a.id === USD_ACCOUNT.id)) {
-      s.accounts = [...s.accounts, { ...USD_ACCOUNT }];
+    // v4: accounts are created by the user. Remove ready-made accounts that were never used or renamed.
+    const usedIds = new Set();
+    for (const t of transactions) { usedIds.add(t.accountId); if (t.toAccountId) usedIds.add(t.toAccountId); }
+    for (const m of months) {
+      for (const [k, v] of Object.entries(m.openingBalances || {})) if (v) usedIds.add(k);
+      for (const [k, v] of Object.entries(m.closing?.balances || {})) if (v) usedIds.add(k);
+    }
+    s.accounts = s.accounts.filter((a) => {
+      const legacy = LEGACY_DEFAULT_ACCOUNTS.find((d) => d.id === a.id);
+      return !legacy || legacy.name !== a.name || usedIds.has(a.id);
+    });
+    const ids = new Set(s.accounts.map((a) => a.id));
+    for (const k of ['expense', 'income']) {
+      s.defaultAccounts[k] = Object.fromEntries(Object.entries(s.defaultAccounts[k] || {}).filter(([, id]) => ids.has(id)));
     }
     s.schema = SCHEMA_VERSION;
   }

@@ -130,13 +130,16 @@ function itemList(id, items) {
     if (p.recurring) meta.push(`${icon('repeat', 'ic-xs')} Monthly`);
     if (p.priority) meta.push(`<span class="tag prio-${p.priority}">${PRIORITY[p.priority]}</span>`);
     if (p.paid) meta.push(p.txId ? `${doneWord(p)} · recorded` : doneWord(p));
-    return `<li class="row has-check">
-      ${checkbox(p.paid, 'plan-tick', `data-month="${id}" data-id="${esc(p.id)}" ${closed ? 'disabled' : ''}`, doneWord(p), { id: p.id })}
-      <div class="row-main tappable" data-act="plan-open" data-month="${id}" data-id="${esc(p.id)}">
-        <span class="row-title ${p.paid ? 'done' : ''}">${esc(p.description)}</span>
-        ${meta.length ? `<span class="row-sub">${meta.join(' · ')}</span>` : ''}
+    return `<li class="swipe" ${closed ? '' : 'data-swipe'}>
+      <div class="row has-check swipe-content">
+        ${checkbox(p.paid, 'plan-tick', `data-month="${id}" data-id="${esc(p.id)}" ${closed ? 'disabled' : ''}`, doneWord(p), { id: p.id })}
+        <div class="row-main tappable" data-act="plan-open" data-month="${id}" data-id="${esc(p.id)}">
+          <span class="row-title ${p.paid ? 'done' : ''}">${esc(p.description)}</span>
+          ${meta.length ? `<span class="row-sub">${meta.join(' · ')}</span>` : ''}
+        </div>
+        ${p.amount ? `<span class="amount ${p.paid ? 'dim' : ''}">${formatMoney(p.amount, p.currency)}</span>` : ''}
       </div>
-      ${p.amount ? `<span class="amount ${p.paid ? 'dim' : ''}">${formatMoney(p.amount, p.currency)}</span>` : ''}
+      ${closed ? '' : `<button class="swipe-del" data-act="plan-swipe-delete" data-month="${id}" data-id="${esc(p.id)}">Delete</button>`}
     </li>`;
   }).join('')}</ul>`;
 }
@@ -157,6 +160,14 @@ function nameSheet({ title, value, placeholder, onSave, onDelete, deleteLabel })
 }
 
 registerActions({
+  'plan-swipe-delete': async (el) => {
+    const { month: id, id: itemId } = el.dataset;
+    const idx = state.months[id].plan.findIndex((x) => x.id === itemId);
+    const p = state.months[id].plan[idx];
+    if (!p) return;
+    await updateMonth(id, (mm) => { mm.plan = mm.plan.filter((x) => x.id !== itemId); }, { financial: true });
+    toast('Removed', { actionLabel: 'Undo', onAction: () => updateMonth(id, (mm) => { mm.plan.splice(idx, 0, p); }, { financial: true }) });
+  },
   'buy-copy-recurring': async (el) => {
     const id = el.dataset.month;
     const items = missingRecurring(state, id).filter((p) => p.kind !== 'income');

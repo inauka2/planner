@@ -27,6 +27,20 @@ const I = {
   'tab-buy': '<path d="M5.5 8.5h13l-.9 10.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8z"/><path d="M9 10.5V7a3 3 0 0 1 6 0v3.5"/>',
   'tab-todo': '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.9"/>',
   'tab-summary': '<path d="M6.5 19v-5M12 19V5M17.5 19v-9"/>',
+  // tab bar — selected (filled) versions; inner details are cut out in the bar's ink colour
+  'tab-budget-on': '<path fill="currentColor" stroke="none" d="M6.5 7h12A1.5 1.5 0 0 1 20 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-12A2.5 2.5 0 0 1 4 17.5V9.5A2.5 2.5 0 0 1 6.5 7z"/><path d="M18.5 7.5V6a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 6.5V9"/><circle cx="16" cy="13.75" r="1.3" style="fill:var(--tab-ink)" stroke="none"/>',
+  'tab-daily-on': '<circle cx="12" cy="12" r="9.2" fill="currentColor" stroke="none"/><path d="M12 7.5V12l3 2" style="stroke:var(--tab-ink)" stroke-width="2"/>',
+  'tab-buy-on': '<path fill="currentColor" d="M5.5 8.5h13l-.9 10.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8z"/><path d="M9 8.5V7a3 3 0 0 1 6 0v1.5"/><path d="M9 11v-.5M15 11v-.5" style="stroke:var(--tab-ink)" stroke-width="2"/>',
+  'tab-todo-on': '<circle cx="12" cy="12" r="9.2" fill="currentColor" stroke="none"/><path d="M8.3 12.2l2.6 2.6 4.8-5.1" style="stroke:var(--tab-ink)" stroke-width="2.2"/>',
+  'tab-summary-on': '<path d="M6.5 19v-5M12 19V5M17.5 19v-9" stroke-width="3.4"/>',
+  // to-do lists (drawn white on a coloured circle)
+  'list-projects': '<path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h4l2 2h7A1.5 1.5 0 0 1 20 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/>',
+  'list-activities': '<path d="M11 4l1.8 4.7 4.7 1.8-4.7 1.8L11 17l-1.8-4.7-4.7-1.8 4.7-1.8z"/><path d="M18 15l.7 1.8 1.8.7-1.8.7L18 20l-.7-1.8-1.8-.7 1.8-.7z"/>',
+  'list-selfdev': '<path d="M12 6.5C10 5 7.5 4.8 4.5 5.2v12.6c3-.4 5.5-.2 7.5 1.3 2-1.5 4.5-1.7 7.5-1.3V5.2c-3-.4-5.5-.2-7.5 1.3zM12 6.5v12.6"/>',
+  'list-health': '<path d="M12 19.5s-7.5-4.4-7.5-9.6A4.1 4.1 0 0 1 12 7.6a4.1 4.1 0 0 1 7.5 2.3c0 5.2-7.5 9.6-7.5 9.6z"/>',
+  'list-german': '<path d="M5 6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5v8a1.5 1.5 0 0 1-1.5 1.5H10l-4 3.5V16h0.5A1.5 1.5 0 0 1 5 14.5z"/><path d="M9 9.5h6M9 12.5h4"/>',
+  'list-spiritual': '<path d="M19 13.5A7.5 7.5 0 0 1 10.5 5a7.5 7.5 0 1 0 8.5 8.5z"/>',
+  'list-other': '<path d="M9 7h10M9 12h10M9 17h10"/><path d="M5 7h.01M5 12h.01M5 17h.01" stroke-width="2.6"/>',
   // spending categories
   'cat-necessary': '<path d="M4.5 10.5L12 4.5l7.5 6V19a1 1 0 0 1-1 1h-4v-5.5h-5V20h-4a1 1 0 0 1-1-1z"/>',
   'cat-subscriptions': '<rect x="3.5" y="5.5" width="17" height="13" rx="3.5"/><path d="M10.5 9.5v5l4-2.5z"/>',

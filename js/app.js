@@ -19,7 +19,7 @@ const TABS = [
   { key: 'daily', label: 'Daily', title: 'Daily', render: renderDaily },
   { key: 'buy', label: 'To Buy', title: null, render: renderBuy }, // renders its own title (drill-down)
   { key: 'todo', label: 'To Do', title: null, render: renderTodo },
-  { key: 'summary', label: 'Summary', title: 'Summary', render: renderSummary },
+  { key: 'summary', label: 'Summary', title: null, render: renderSummary },
 ];
 const TAB_KEY = 'planner.lastTab';
 
@@ -34,7 +34,7 @@ function parseRoute() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   if (parts[0] === 'm' && isMonthId(parts[1] || '')) {
     const tab = TABS.some((t) => t.key === parts[2]) ? parts[2] : lastTab();
-    return { name: 'month', id: parts[1], tab, path: tab === 'buy' ? parts.slice(3, 5) : [] };
+    return { name: 'month', id: parts[1], tab, path: tab === 'buy' || tab === 'todo' ? parts.slice(3, 5) : [] };
   }
   if (parts[0] === 'settings') return { name: 'settings' };
   const y = parts[0] === 'y' && /^\d{4}$/.test(parts[1] || '') ? Number(parts[1]) : new Date().getFullYear();
@@ -47,7 +47,6 @@ function renderMonth(r) {
   const tab = TABS[tabIdx];
   const { year } = parseMonthId(r.id);
   const hideAdd = m.closing && ['budget', 'daily', 'summary', 'buy'].includes(r.tab);
-  const prevIdx = last?.name === 'month' ? TABS.findIndex((t) => t.key === last.tab) : tabIdx;
   return `
     <header class="topbar">
       <a class="glass-btn" href="#/y/${year}" aria-label="All months">${icon('grid')}</a>
@@ -64,8 +63,7 @@ function renderMonth(r) {
     </main>
     <div class="dock">
       <nav class="tabbar" aria-label="Month sections">
-        <span class="tab-indicator" style="--i:${prevIdx}"></span>
-        ${TABS.map((t) => `<a href="#/m/${r.id}/${t.key}" class="tab ${t.key === r.tab ? 'active' : ''}" ${t.key === r.tab ? 'aria-current="page"' : ''}>${icon(`tab-${t.key}`)}<span>${t.label}</span></a>`).join('')}
+        ${TABS.map((t) => `<a href="#/m/${r.id}/${t.key}" class="tab ${t.key === r.tab ? 'active' : ''}" ${t.key === r.tab ? 'aria-current="page"' : ''}>${icon(t.key === r.tab ? `tab-${t.key}-on` : `tab-${t.key}`)}<span>${t.label}</span></a>`).join('')}
       </nav>
       ${hideAdd ? '' : `<button class="add-btn" data-act="fab" data-month="${r.id}" data-tab="${r.tab}" data-path="${esc(r.path.join('/'))}" aria-label="Add">${icon('plus')}</button>`}
     </div>`;
@@ -125,13 +123,24 @@ export async function render() {
   if (motionClass) app.querySelector('.content')?.classList.add(motionClass);
   window.scrollTo(0, motionClass ? 0 : y);
   if (r.name === 'home' && motionClass) document.querySelector('.month-card.now')?.scrollIntoView({ block: 'center' });
-  // slide the tab highlight from the previous tab to the current one
-  const ind = app.querySelector('.tab-indicator');
-  if (ind) {
-    ind.getBoundingClientRect(); // commit the start position before moving
-    ind.style.setProperty('--i', TABS.findIndex((t) => t.key === r.tab));
-  }
+  setupCarousels(motionClass !== null);
   last = r;
+}
+
+/** Horizontal carousels (Summary years): start on the current card and keep the page dots in sync. */
+function setupCarousels(reset) {
+  app.querySelectorAll('[data-carousel]').forEach((c) => {
+    const dots = c.nextElementSibling?.classList.contains('dots') ? [...c.nextElementSibling.children] : [];
+    const here = c.querySelector('[data-scroll-here]');
+    if (here && (reset || !c.dataset.ready)) c.scrollLeft = here.offsetLeft - c.offsetLeft - parseFloat(getComputedStyle(c).paddingLeft || 0);
+    c.dataset.ready = '1';
+    const sync = () => {
+      const i = Math.round(c.scrollLeft / Math.max(1, c.firstElementChild.offsetWidth + 16));
+      dots.forEach((d, j) => d.classList.toggle('on', j === i));
+    };
+    c.addEventListener('scroll', sync, { passive: true });
+    sync();
+  });
 }
 
 setRenderer(render);
@@ -141,7 +150,7 @@ registerActions({
   fab: (el) => {
     const { month: id, tab } = el.dataset;
     const [catId, listId] = (el.dataset.path || '').split('/').filter(Boolean);
-    if (tab === 'todo') return addTaskSheet(id);
+    if (tab === 'todo') return addTaskSheet(id, catId || null);
     if (tab === 'buy') return addPlanItem(id, { kind: 'expense', categoryId: catId || null, listId: listId || null });
     const c = canEdit(state, id);
     if (!c.ok) return toast(c.reason);
