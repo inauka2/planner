@@ -1,5 +1,6 @@
-// On-device profiles, no passwords. Each profile has its own data database on this iPhone.
-// The app opens straight into the last-used profile; nothing is sent anywhere.
+// On-device profiles. Each profile has its own data database on this iPhone.
+// A profile can be linked to a Google account (sign in once, stay signed in until you log out)
+// and can be locked with Face ID. No passwords; your data is never sent anywhere.
 
 const AUTH_DB = 'planner-auth';
 const FIRST_DATA_DB = 'monthly-planner'; // the first profile adopts data saved before profiles existed
@@ -58,13 +59,15 @@ export async function currentUser() {
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
 /**
- * Open without a password: the profile in use, else the only profile, else a new one.
- * Returns null only when several profiles exist and none is in use, so the person can pick.
+ * The profile to open: the one in use, else (when no profile uses Google) the only profile or
+ * a new one. Returns null when the person must choose or sign in with Google — after logging
+ * out of a Google profile, or when several profiles exist.
  */
 export async function startSession() {
   const cur = await currentUser();
   if (cur) return cur;
   const users = await allUsers();
+  if (users.some((u) => u.googleSub)) return null;
   if (users.length === 1) { await setSession(users[0].id); return users[0]; }
   if (users.length > 1) return null;
   const user = { id: newId(), email: '', createdAt: new Date().toISOString(), dataDb: FIRST_DATA_DB };
@@ -80,5 +83,46 @@ export async function useProfile(id) {
   return user;
 }
 
-/** A display name for a profile: the part of its email before @, or “This iPhone”. */
-export const profileName = (u) => (u?.email ? u.email.split('@')[0] : 'This iPhone');
+/** A display name for a profile: its Google name, the part of its email before @, or “This iPhone”. */
+export const profileName = (u) => u?.name || (u?.email ? u.email.split('@')[0] : 'This iPhone');
+
+export async function updateUser(id, patch) {
+  const u = (await allUsers()).find((x) => x.id === id);
+  if (!u) throw new Error('That profile no longer exists.');
+  const next = { ...u, ...patch };
+  await putUser(next);
+  return next;
+}
+
+const googleFields = (c) => ({ googleSub: c.sub, email: String(c.email).toLowerCase(), name: c.name || c.given_name || '' });
+
+/**
+ * After Google confirmed who you are: open the profile linked to this Google account; else adopt a
+ * profile created earlier with the same email; else create one (its own, empty data).
+ */
+export async function signInWithGoogle(claims) {
+  const users = await allUsers();
+  const email = String(claims.email).toLowerCase();
+  let user = users.find((u) => u.googleSub === claims.sub)
+    || users.find((u) => !u.googleSub && u.email && u.email.toLowerCase() === email);
+  if (user) user = { ...user, ...googleFields(claims) };
+  else {
+    const id = newId();
+    user = { id, createdAt: new Date().toISOString(), dataDb: users.some((u) => u.dataDb === FIRST_DATA_DB) ? `monthly-planner-${id}` : FIRST_DATA_DB, ...googleFields(claims) };
+  }
+  await putUser(user);
+  await setSession(user.id);
+  return user;
+}
+
+/** Link a Google account to `profileId`. If another profile already uses it, open that one instead. */
+export async function linkGoogle(profileId, claims) {
+  const users = await allUsers();
+  const other = users.find((u) => u.googleSub === claims.sub && u.id !== profileId);
+  if (other) { await setSession(other.id); return { user: other, switched: true }; }
+  const user = await updateUser(profileId, googleFields(claims));
+  await setSession(user.id);
+  return { user, switched: false };
+}
+
+export const logOut = () => setSession(null);

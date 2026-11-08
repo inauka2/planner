@@ -10,9 +10,11 @@ import { renderReports } from './views/reports.js';
 import { renderSettings, importBackupFile } from './views/settings.js';
 import './views/budget.js'; // money owed to me + balance sheets (actions)
 import './views/daily.js'; // transaction row actions (open / swipe-delete)
-import { startSession, allUsers, useProfile } from './auth.js';
+import { startSession, allUsers, useProfile, signInWithGoogle, linkGoogle, logOut } from './auth.js';
+import { readGoogleReturn } from './google.js';
+import { faceIdAvailable } from './faceid.js';
 import { useDatabase } from './db.js';
-import { profilePicker } from './views/authscreen.js';
+import { signInGate, lockScreen } from './views/authscreen.js';
 
 const thisMonth = () => localDateParts().monthId;
 const TABS = [
@@ -174,6 +176,12 @@ function setupCarousels(reset) {
 setRenderer(render);
 
 registerActions({
+  'log-out': async () => {
+    await logOut();
+    closeSheet();
+    location.hash = '#/';
+    location.reload();
+  },
   'profile-switch': async (el) => {
     await useProfile(el.dataset.id);
     closeSheet();
@@ -201,11 +209,40 @@ setWriteErrorHandler((err) => toast(`Couldn’t save: ${err.message || 'storage 
 // ---------- boot ----------
 export let user = null; // the profile in use (its data lives in its own database)
 export let profiles = []; // every profile on this iPhone
+export let faceIdOk = false; // this device can use Face ID / passcode for the lock
+export const setUser = (u) => { user = u; profiles = profiles.map((p) => (p.id === u.id ? u : p)); };
+
+const LOCK_AFTER_MS = 2 * 60 * 1000; // lock again after 2 minutes away from the app
+let hiddenAt = null;
+let locking = false;
+
+async function relock() {
+  if (!user?.faceId || locking) return;
+  locking = true;
+  closeSheet();
+  try { setUser(await lockScreen(user)); } finally { locking = false; }
+  render();
+}
 
 (async function boot() {
+  let notice = '';
   try {
-    user = await startSession(); // no password: opens the last-used profile
-    if (!user) { app.innerHTML = ''; user = await profilePicker(); }
+    faceIdOk = await faceIdAvailable();
+    const back = await readGoogleReturn(); // just came back from Google's sign-in page?
+    let justSignedIn = false;
+    if (back?.claims) {
+      if (back.intent === 'link' && back.profileId) {
+        const r = await linkGoogle(back.profileId, back.claims);
+        notice = r.switched ? `${back.claims.email} already had its own profile, so it’s open now.` : `Signed in with Google as ${back.claims.email}`;
+      } else {
+        await signInWithGoogle(back.claims);
+        notice = `Signed in as ${back.claims.email}`;
+      }
+      justSignedIn = true;
+    }
+    user = await startSession(); // no password: opens the profile in use
+    if (!user) { app.innerHTML = ''; user = await signInGate(back?.error); } else if (back?.error) notice = back.error;
+    if (user.faceId && !justSignedIn) { app.innerHTML = ''; user = await lockScreen(user); }
     profiles = await allUsers();
     useDatabase(user.dataDb);
   } catch (e) {
@@ -216,6 +253,12 @@ export let profiles = []; // every profile on this iPhone
   app.innerHTML = '';
   await render();
   navigator.storage?.persist?.().catch(() => {});
+  if (notice) toast(notice, { duration: 5000 });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (hiddenAt && Date.now() - hiddenAt > LOCK_AFTER_MS) { hiddenAt = null; relock(); return; }
+    hiddenAt = null;
+  });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && !isSheetOpen()) render(); // the date may have changed
   });
@@ -239,8 +282,9 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         });
       });
       let reloaded = false;
+      const hadController = !!navigator.serviceWorker.controller; // first install: nothing to reload
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (reloaded) return;
+        if (reloaded || !hadController) return;
         reloaded = true;
         location.reload();
       });

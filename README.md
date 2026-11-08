@@ -11,7 +11,8 @@ Five simple tabs. Every page has the ⚙︎ Settings button at the top left and 
 - **Planned:** everything you plan to buy or pay this month, bills included, on one page. At the top: **Spent** and **Still to buy**. Then *Due soon* (bills due in the next 7 days or overdue), your **categories** (open one to set its budget, add items and use subcategories) and *Expected income*. Tick an item when you pay it and the payment is recorded.
 - **To Do:** the month's activities and important things to do, in lists (Activities, Projects, Health…). Type tasks one after another, give them a deadline or a cost (a cost also appears in To Buy), tick them off, and bring unfinished ones into the next month.
 - **Summary:** the month at a glance (started with, ends with, income, spent), spending by category and by year, and **closing the month**. *More reports* has charts for net worth, cash flow, payees and more.
-- **Settings:** accounts, appearance (auto / light / dark), privacy mode (hides every amount — also the eye at the top), reports, import, categories, exchange rates, backup and restore.
+- **Month and year:** tap the month name on any page to pick another month from the whole year.
+- **Settings:** Google sign-in, Face ID lock, accounts, appearance (auto / light / dark), privacy mode (hides every amount — also the eye at the top), reports, import, categories, exchange rates, backup and restore.
 - **Transactions** (blue +): expense, income or transfer, any date, category and subcategory, tags and notes. Paying in USD from a Lek or Euro account records both the price and what the bank took.
 - **Import** CSV, OFX, QFX or QIF statements from your bank into any account; rows already there are skipped.
 - **Currencies:** ALL, EUR and USD are kept separate (one currency per account). The exchange rates (Settings) are only used for the "≈ ALL" figures, budgets and reports, and are saved with each closed month.
@@ -27,6 +28,9 @@ Plain HTML, CSS and JavaScript (ES modules). No framework, no build step, no run
 | `js/insights.js` | Registers, running balances, scheduled items, forecast, report data, search (pure, tested) |
 | `js/importer.js` | CSV / OFX / QFX / QIF statement parsers (pure, tested) |
 | `js/routes.js` | URLs of every screen |
+| `js/config.js` | Google client ID for *Sign in with Google* |
+| `js/google.js`, `js/faceid.js` | Google sign-in (ID-token check) and the Face ID lock (passkey check) |
+| `js/auth.js` | Profiles on this iPhone, Google link, log out |
 | `js/defaults.js` | Default accounts, categories, lists and the new-month template |
 | `js/db.js`, `js/store.js` | IndexedDB storage and app state |
 | `js/backup.js` | Backup, restore and CSV export |
@@ -75,13 +79,26 @@ Cloudflare Pages and Vercel (static, no framework) work the same way.
 
 **Important:** the Home Screen app and Safari keep **separate** storage on iPhone. Enter your data in the installed app. If you entered data in Safari first, use *Settings → Export backup* there, then *Restore backup* in the installed app.
 
-## No password
+## Sign in with Google and Face ID
 
-Planner opens straight into your data — there is no sign-up, sign-in or password.
+Planner opens straight into your data. Two optional extras, both in *Settings → Account & security*:
 
-- Your data lives **only on that iPhone**. Nothing is sent online and nothing syncs to other devices, so use backups (below) to keep a copy.
-- If you created more than one account in an earlier version, each one is kept as a separate **profile** with its own data. Switch between them in *Settings → Profile*.
-- Anyone who can unlock your iPhone can open the app. Turn on **Privacy mode** (the eye button) to blur amounts.
+- **Sign in with Google:** sign in once with your Gmail. You stay signed in, even after closing the app, until you tap *Log out*. After logging out, the app asks you to sign in with Google again (this needs internet). Signing in only confirms who you are. Your money data still stays on the iPhone and is never sent to Google.
+- **Unlock with Face ID:** the app asks for Face ID when you open it, and again after 2 minutes away. If Face ID fails, iOS offers your iPhone passcode. *Can't use Face ID?* on the lock screen lets you sign in with Google instead, if your Google account is linked.
+- Each Google account has its own data on the iPhone. Signing in with the same Gmail always opens the same data.
+
+### One-time setup for Google sign-in
+
+Google only lets an app use "Sign in with Google" once it is registered, so this needs a free Google Cloud client ID:
+
+1. Open https://console.cloud.google.com/ with your Google account and create a project (any name, e.g. *Planner*).
+2. *APIs & Services → OAuth consent screen*: choose **External**, fill in the app name and your email, and add yourself as a **test user**.
+3. *APIs & Services → Credentials → Create credentials → OAuth client ID*: type **Web application**.
+   - **Authorized JavaScript origins:** `https://inauka2.github.io` (and `http://localhost:5173` for local testing).
+   - **Authorized redirect URIs:** `https://inauka2.github.io/planner/` (and `http://localhost:5173/`). The address must match exactly, including the final `/`.
+4. Copy the **Client ID** (it ends in `.apps.googleusercontent.com`; it is public, not a secret) into `GOOGLE_CLIENT_ID` in `js/config.js`, bump `VERSION` in `sw.js`, and deploy.
+
+Until then, *Sign in with Google* shows "Not set up yet", and Face ID works on its own.
 
 ## Back up your data
 

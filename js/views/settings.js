@@ -4,17 +4,19 @@ import { parseRate, formatRate } from '../money.js';
 import { validateBackup, toCsv, saveFile } from '../backup.js';
 import { ACCOUNT_KINDS } from '../defaults.js';
 import { icon } from '../icons.js';
-import { esc, registerActions, actions, openSheet, fieldError, toast, confirmDialog } from '../ui.js';
+import { esc, registerActions, actions, openSheet, fieldError, toast, confirmDialog, rerender } from '../ui.js';
 import { localDateParts } from '../ledger.js';
 import { openAccountSheet } from './accounts.js';
 import { topBar, largeTitle, accountSquare } from './chrome.js';
 import { openImportSheet } from './importer.js';
 import { segmented, actions as allActions } from '../ui.js';
-import { user, profiles, backHref } from '../app.js';
+import { user, profiles, backHref, faceIdOk, setUser } from '../app.js';
 import { routes } from '../routes.js';
-import { profileName } from '../auth.js';
+import { profileName, updateUser } from '../auth.js';
+import { googleEnabled, startGoogleSignIn } from '../google.js';
+import { enrollFaceId, unlockWithFaceId } from '../faceid.js';
 
-export const APP_VERSION = '2.1.2';
+export const APP_VERSION = '2.2.0';
 let persisted = null;
 
 export function renderSettings() {
@@ -58,10 +60,15 @@ export function renderSettings() {
         <li class="row tappable" data-act="cats-open"><div class="row-main"><span class="row-title">Categories</span><span class="row-sub">Rename, add or remove spending categories</span></div><span class="row-end">${icon('chev-right')}</span></li>
       </ul>
 
-      ${user ? `<p class="section-label"><span>Profile</span></p>
+      ${user ? `<p class="section-label"><span>Account &amp; security</span></p>
       <ul class="list card flush">
-        <li class="row has-icon"><span class="icon-tile">${icon('user')}</span><div class="row-main"><span class="row-title">${esc(profileName(user))}</span><span class="row-sub">On this iPhone since ${esc(user.createdAt.slice(0, 10))} · no password</span></div></li>
-        ${profiles.filter((p) => p.id !== user.id).map((p) => `<li class="row tappable" data-act="profile-switch" data-id="${esc(p.id)}"><div class="row-main"><span class="row-title">Switch to ${esc(profileName(p))}</span>${p.email ? `<span class="row-sub">${esc(p.email)}</span>` : ''}</div><span class="row-end">${icon('chev-right')}</span></li>`).join('')}
+        <li class="row has-icon"><span class="icon-tile">${icon('user')}</span><div class="row-main"><span class="row-title">${esc(profileName(user))}</span><span class="row-sub">${user.googleSub ? `Signed in with Google · ${esc(user.email)}` : `On this iPhone since ${esc(user.createdAt.slice(0, 10))}`}</span></div></li>
+        ${!user.googleSub && googleEnabled() ? `<li class="row tappable" data-act="google-link"><div class="row-main"><span class="row-title">Sign in with Google</span><span class="row-sub">Once — you stay signed in until you log out</span></div><span class="row-end">${icon('chev-right')}</span></li>` : ''}
+        ${!user.googleSub && !googleEnabled() ? '<li class="row"><div class="row-main"><span class="row-title muted">Sign in with Google</span><span class="row-sub">Not set up yet — needs a Google client ID (see README)</span></div></li>' : ''}
+        ${faceIdOk || user.faceId ? `<li class="row tappable" data-act="faceid-toggle"><div class="row-main"><span class="row-title">Unlock with Face ID</span><span class="row-sub">Asks for Face ID when you open the app, and after 2 minutes away</span></div>
+          <span class="switch"><input type="checkbox" ${user.faceId ? 'checked' : ''} tabindex="-1"><span></span></span></li>` : ''}
+        ${profiles.filter((p) => p.id !== user.id && !p.googleSub).map((p) => `<li class="row tappable" data-act="profile-switch" data-id="${esc(p.id)}"><div class="row-main"><span class="row-title">Switch to ${esc(profileName(p))}</span>${p.email ? `<span class="row-sub">${esc(p.email)}</span>` : ''}</div><span class="row-end">${icon('chev-right')}</span></li>`).join('')}
+        ${user.googleSub ? '<li class="row tappable" data-act="logout-ask"><div class="row-main"><span class="row-title warn">Log out</span></div></li>' : ''}
       </ul>` : ''}
 
       <p class="section-label"><span>Exchange rate</span></p>
@@ -110,6 +117,29 @@ registerActions({
     const btn = document.createElement('button');
     btn.dataset.month = id;
     allActions['cats-edit'](btn);
+  },
+  'google-link': () => {
+    try { startGoogleSignIn({ intent: 'link', profileId: user.id }); } catch (e) { toast(e.message); }
+  },
+  'logout-ask': async () => {
+    const ok = await confirmDialog({ title: 'Log out?', message: `Your data stays on this iPhone. Sign in with Google (${esc(user.email)}) to open it again — you’ll need an internet connection.`, confirmLabel: 'Log out', danger: true });
+    if (ok) actions['log-out']();
+  },
+  'faceid-toggle': async () => {
+    try {
+      if (user.faceId) {
+        await unlockWithFaceId(user.faceId); // confirm it's you before turning the lock off
+        setUser(await updateUser(user.id, { faceId: null }));
+        toast('Face ID lock turned off');
+      } else {
+        const rec = await enrollFaceId(user);
+        setUser(await updateUser(user.id, { faceId: rec }));
+        toast('Face ID lock is on');
+      }
+    } catch (e) {
+      toast(e?.name === 'NotAllowedError' ? 'Face ID was cancelled.' : e.message || String(e));
+    }
+    rerender();
   },
   'acc-add': async () => {
     const monthId = localDateParts().monthId;

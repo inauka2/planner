@@ -5,7 +5,7 @@ import { accountById, monthLabel, prevMonthId, nextMonthId, localDateParts, canE
 import { formatMoney } from '../money.js';
 import { icon } from '../icons.js';
 import { categoryStyle, KIND_COLORS } from '../defaults.js';
-import { esc } from '../ui.js';
+import { esc, registerActions, openSheet } from '../ui.js';
 import { categoryName, subcategoryName } from '../insights.js';
 import { user } from '../app.js';
 import { profileName } from '../auth.js';
@@ -49,16 +49,50 @@ export function statusLine() {
   return `${esc(profileName(user))} / ${icon('check', 'ic-xs')} Up to date`;
 }
 
-/** ‹ November 2026 › — links built by `hrefFor(monthId)`. */
+const MONTH_TOKEN = '__MONTH__';
+
+/** ‹ November 2026 › — links built by `hrefFor(monthId)`. Tapping the title opens the year picker. */
 export function monthSwitch(id, hrefFor) {
   const m = state.months[id];
-  const today = localDateParts().monthId;
   return `<nav class="month-switch" aria-label="Month">
     <a href="${hrefFor(prevMonthId(id))}" aria-label="Previous month">${icon('chev-left')}</a>
-    <span class="title">${m?.closing ? icon('lock', 'ic-xs') : ''}${monthLabel(id)}${id === today ? '' : ''}</span>
+    <button type="button" class="title" data-act="month-pick" data-month="${id}" data-tpl="${esc(hrefFor(MONTH_TOKEN))}" aria-label="${esc(monthLabel(id))} — choose another month">
+      ${m?.closing ? icon('lock', 'ic-xs') : ''}${monthLabel(id)}${icon('tri-down', 'ic-xs caret')}</button>
     <a href="${hrefFor(nextMonthId(id))}" aria-label="Next month">${icon('chev-right')}</a>
   </nav>`;
 }
+
+/** A whole year of months to pick from; ‹ › change the year. */
+function yearGrid(year, selected, tpl) {
+  const today = localDateParts().monthId;
+  return `<div class="mp-year">
+      <button type="button" class="round-btn sm" data-act="mp-year" data-year="${year - 1}" aria-label="Previous year">${icon('chev-left')}</button>
+      <span>${year}</span>
+      <button type="button" class="round-btn sm" data-act="mp-year" data-year="${year + 1}" aria-label="Next year">${icon('chev-right')}</button>
+    </div>
+    <div class="mp-grid">${MONTH_NAMES.map((name, i) => {
+      const id = `${year}-${String(i + 1).padStart(2, '0')}`;
+      const m = state.months[id];
+      const cls = [id === selected ? 'sel' : '', id === today ? 'today' : '', m ? 'has' : ''].join(' ');
+      return `<a class="mp-cell ${cls}" href="${tpl.replace(MONTH_TOKEN, id)}" ${id === selected ? 'aria-current="date"' : ''}>
+        <span>${name.slice(0, 3)}</span>${m?.closing ? icon('lock', 'ic-xs') : m ? '<i class="dot"></i>' : '<i></i>'}</a>`;
+    }).join('')}</div>
+    <p class="hint mp-legend"><i class="dot"></i> has entries · ${icon('lock', 'ic-xs')} closed${today.slice(0, 4) === String(year) ? '' : ` · <a href="${tpl.replace(MONTH_TOKEN, today)}">Go to this month</a>`}</p>`;
+}
+
+registerActions({
+  'month-pick': (el) => {
+    const { month, tpl } = el.dataset;
+    const draw = (year) => yearGrid(year, month, tpl);
+    openSheet({
+      title: 'Choose a month',
+      body: `<div data-mp>${draw(Number(month.slice(0, 4)))}</div>`,
+      actions: {
+        'mp-year': (b) => { document.querySelector('#sheet-root [data-mp]').innerHTML = draw(Number(b.dataset.year)); },
+      },
+    });
+  },
+});
 
 export function square(color, ic, cls = '') {
   return `<span class="sq ${cls}" style="--sq:${color}">${icon(ic)}</span>`;
