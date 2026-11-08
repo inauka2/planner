@@ -9,10 +9,15 @@ import { ACCOUNT_KINDS } from '../defaults.js';
 
 export const accountsFor = (currency) => state.settings.accounts.filter((a) => a.currency === currency && !a.archived);
 
+/**
+ * Account to suggest for a payment priced in `currency`: the one used last time for that currency
+ * (it may hold another currency — e.g. dollars paid with a Lek card), else one in that currency,
+ * else your Lek account.
+ */
 export function defaultAccount(type, currency) {
   const pref = state.settings.defaultAccounts?.[type === 'income' ? 'income' : 'expense']?.[currency];
-  const list = accountsFor(currency);
-  return (list.find((a) => a.id === pref) || list[0])?.id ?? null;
+  const active = state.settings.accounts.filter((a) => !a.archived);
+  return (active.find((a) => a.id === pref) || accountsFor(currency)[0] || accountsFor('ALL')[0] || active[0])?.id ?? null;
 }
 
 export function accountOptions(list, selected) {
@@ -74,33 +79,39 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
 
   const editing = !!tx;
   const month = state.months[monthId];
-  const held = CURRENCIES.filter((c) => accountsFor(c).length);
+  const rates = getRates(state, monthId);
+  // The price may be in any currency; the account may hold another (the bank converts).
+  const priced = tx?.origCurrency ? { amount: tx.origAmount, currency: tx.origCurrency } : tx ? { amount: tx.amount, currency: tx.currency } : null;
   const last = state.settings.lastCurrency;
-  const cur = tx?.currency ?? prefill.currency ?? (held.includes(last) ? last : held[0] ?? 'ALL');
-  const curs = CURRENCIES.filter((c) => held.includes(c) || c === cur);
+  const cur = priced?.currency ?? prefill.currency ?? (CURRENCIES.includes(last) ? last : 'ALL');
   const acc = tx?.accountId ?? prefill.accountId ?? defaultAccount(t, cur);
-  const amountText = tx ? centsToInput(tx.amount) : prefill.amountText ?? (prefill.amount ? centsToInput(prefill.amount) : '');
+  const amountText = priced ? centsToInput(priced.amount) : prefill.amountText ?? (prefill.amount ? centsToInput(prefill.amount) : '');
   const dt = tx ? { date: tx.date, time: tx.time } : defaultDateTime(monthId);
   const catId = tx?.categoryId ?? prefill.categoryId ?? '';
+  const isExp = t === 'expense';
 
   const body = `
     ${editing || link ? '' : typeSwitch(t)}
     <div class="amount-row">
-      <label class="field grow"><span class="label">Amount</span>
+      <label class="field grow"><span class="label">${isExp ? 'Price' : 'Amount'}</span>
         <input class="input input-amount" name="amount" inputmode="decimal" enterkeyhint="next" placeholder="0" value="${esc(amountText)}" ${editing ? '' : 'autofocus'}>
       </label>
-      <div class="field">${curs.length > 1 ? segmented('currency', curs.map((c) => [c, c]), cur, { cls: 'seg-cur' })
-        : `<input type="hidden" name="currency" value="${cur}"><span class="cur-static">${cur}</span>`}</div>
+      <div class="field">${segmented('currency', CURRENCIES.map((c) => [c, c]), cur, { cls: 'seg-cur' })}</div>
     </div>
-    <label class="field"><span class="label">${t === 'expense' ? 'What was it for?' : 'Where is it from?'}</span>
+    <label class="field"><span class="label">${isExp ? 'What was it for?' : 'Where is it from?'}</span>
       <input class="input" name="description" maxlength="120" enterkeyhint="done"
-        placeholder="${t === 'expense' ? 'Coffee, groceries, taxi…' : 'Salary, gift, refund…'}" value="${esc(tx?.description ?? prefill.description ?? '')}">
+        placeholder="${isExp ? 'Coffee, groceries, taxi…' : 'Salary, gift, refund…'}" value="${esc(tx?.description ?? prefill.description ?? '')}">
     </label>
-    <label class="field field-inline"><span class="label">${t === 'expense' ? 'Paid from' : 'Received into'}</span>
-      <select class="select" name="account">${accountOptions(accountsFor(cur), acc)}</select>
+    <label class="field field-inline"><span class="label">${isExp ? 'Paid from' : 'Received into'}</span>
+      <select class="select" name="account">${allAccountOptions(acc)}</select>
     </label>
+    <div class="field converted" data-charged hidden>
+      <span class="label">${isExp ? 'Taken from the account' : 'Credited to the account'} <span class="cur-tag" data-acc-cur></span></span>
+      <input class="input" name="charged" inputmode="decimal" placeholder="0" value="${tx?.origCurrency ? centsToInput(tx.amount) : ''}">
+      <p class="hint" data-charged-hint></p>
+    </div>
     ${editing ? dateFields(monthId, dt.date, dt.time) : '<p class="hint">Date and time are recorded automatically.</p>'}
-    ${t === 'expense' && (editing || catId) ? `
+    ${isExp && (editing || catId) ? `
       <label class="field"><span class="label">Category <span class="optional">optional</span></span>
         <select class="select" name="category">
           <option value="">Not categorised</option>
@@ -111,16 +122,41 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
     ${editing ? `<button type="button" class="btn btn-danger-ghost" data-act="tx-delete">Delete ${t}</button>` : ''}
   `;
 
+  let chargedEdited = !!tx?.origCurrency;
+  const sync = (form) => {
+    const price = form.currency.value;
+    const a = accountById(state, form.account.value);
+    const cross = a && a.currency !== price;
+    form.querySelector('[data-charged]').hidden = !cross;
+    if (!cross) return;
+    form.querySelector('[data-acc-cur]').textContent = a.currency;
+    const foreign = price === 'ALL' ? a.currency : price;
+    form.querySelector('[data-charged-hint]').textContent =
+      `${a.name} holds ${a.currency}. Suggested at 1 ${foreign} = ${formatRate(rates[foreign])} ALL — type what your bank actually ${isExp ? 'charged' : 'credited'}.`;
+    if (!chargedEdited) {
+      const p = parseAmount(form.amount.value);
+      form.charged.value = p.ok ? centsToInput(convertCents(p.cents, price, a.currency, rates)) : '';
+    }
+  };
+
   openSheet({
-    title: editing ? `Edit ${t}` : link ? (t === 'expense' ? 'Record expense' : 'Record income') : TITLES[t],
+    title: editing ? `Edit ${t}` : link ? (isExp ? 'Record expense' : 'Record income') : TITLES[t],
     body,
-    submitLabel: editing ? 'Save changes' : t === 'expense' ? 'Add expense' : 'Add income',
+    submitLabel: editing ? 'Save changes' : isExp ? 'Add expense' : 'Add income',
     onOpen: (form) => {
+      sync(form);
+      form.addEventListener('input', (e) => {
+        if (e.target.name === 'charged') chargedEdited = true;
+        if (e.target.name === 'amount') sync(form);
+      });
       form.addEventListener('change', (e) => {
         if (e.target.name === 'currency') {
-          const c = e.target.value;
-          form.account.innerHTML = accountOptions(accountsFor(c), defaultAccount(t, c));
+          const pref = defaultAccount(t, e.target.value);
+          if (pref) form.account.value = pref;
+          chargedEdited = false;
+          sync(form);
         }
+        if (e.target.name === 'account') { chargedEdited = false; sync(form); }
         if (e.target.name === 'type') {
           openTxSheet({ monthId, type: e.target.value, prefill: { amountText: form.amount.value, description: form.description.value } });
         }
@@ -137,22 +173,32 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
     onSubmit: async (form) => {
       const amt = parseAmount(form.amount.value);
       if (!amt.ok) return fieldError(form, 'amount', amt.error);
-      const currency = form.currency.value;
-      const accountId = form.account.value;
-      if (!accountId) return fieldError(form, 'account', `You have no ${currency} account yet — add one in Budget`);
-      const description = form.description.value.trim() || (t === 'expense' ? 'Expense' : 'Income');
+      const price = form.currency.value;
+      const a = accountById(state, form.account.value);
+      if (!a) return fieldError(form, 'account', 'Choose an account');
+      let money = { amount: amt.cents, currency: price };
+      let orig = {};
+      if (a.currency !== price) {
+        const c = parseAmount(form.charged.value);
+        if (!c.ok) return fieldError(form, 'charged', c.error);
+        money = { amount: c.cents, currency: a.currency };
+        orig = { origAmount: amt.cents, origCurrency: price };
+      }
+      const description = form.description.value.trim() || (isExp ? 'Expense' : 'Income');
       const date = form.date?.value || dt.date;
       const time = form.time?.value || dt.time;
+      const { origAmount: _oa, origCurrency: _oc, ...base } = tx || {};
       const record = {
-        ...(tx || {}),
-        id: tx?.id ?? uid(), monthId, type: t, amount: amt.cents, currency, accountId, description, date, time,
+        ...base, ...orig,
+        id: tx?.id ?? uid(), monthId, type: t, amount: money.amount, currency: money.currency, accountId: a.id, description, date, time,
         categoryId: form.category ? form.category.value || null : catId || null,
         createdAt: tx?.createdAt ?? new Date().toISOString(),
       };
       await saveTx(record, link);
-      rememberDefaults(t, currency, accountId);
+      rememberDefaults(t, price, a.id);
       if (!editing && !link) setTimeout(() => offerPlanLink(record), 380); // after this sheet has closed
-      toast(editing ? 'Saved' : `${t === 'expense' ? 'Expense' : 'Income'} added · ${formatMoney(amt.cents, currency)}`);
+      const shown = orig.origCurrency ? `${formatMoney(amt.cents, price)} (${formatMoney(money.amount, money.currency)})` : formatMoney(amt.cents, price);
+      toast(editing ? 'Saved' : `${isExp ? 'Expense' : 'Income'} added · ${shown}`);
       onSaved?.(record);
     },
   });

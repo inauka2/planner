@@ -10,7 +10,7 @@ import { openAccountSheet } from './accounts.js';
 import { user } from '../app.js';
 import { changePassword } from '../auth.js';
 
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.8.0';
 let persisted = null;
 
 export function renderSettings() {

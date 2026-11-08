@@ -49,11 +49,18 @@ test('CSV export keeps original currencies, escapes text and sorts by time', () 
   const csv = toCsv(sample());
   const lines = csv.replace(/^﻿/, '').trim().split('\r\n');
   assert.equal(lines.length, 4);
-  assert.match(lines[1], /^2026-10-01,09:00,October 2026,Transfer,ATM withdrawal,10000,ALL,Bank account 1,Cash ALL,10000,ALL,,1,$/);
+  assert.match(lines[1], /^2026-10-01,09:00,October 2026,Transfer,ATM withdrawal,10000,ALL,Bank account 1,Cash ALL,10000,ALL,,1,,,$/);
   assert.match(lines[2], /Netflix,-12.99,EUR,Bank account 2/);
-  assert.match(lines[2], /,97,-1260.03$/); // €12.99 × 97 = 1,260.03 ALL equivalent
+  assert.match(lines[2], /,97,-1260.03,,$/); // €12.99 × 97 = 1,260.03 ALL equivalent
   assert.match(lines[3], /"Groceries, ""big"" shop",-1250,ALL/);
   assert.match(lines[3], /Necessary bills/);
+});
+
+test('CSV shows the original price of payments made in another currency', () => {
+  const state = sample();
+  state.transactions.push({ id: 't4', monthId: '2026-10', type: 'expense', amount: 225000, currency: 'ALL', origAmount: 2500, origCurrency: 'USD', accountId: 'bank1', description: 'Spotify', date: '2026-10-04', time: '10:00' });
+  const line = toCsv(state).split('\r\n').find((l) => l.includes('Spotify'));
+  assert.match(line, /Spotify,-2250,ALL,Bank account 1,.*,-25,USD$/);
 });
 
 test('service worker precaches every app file', () => {

@@ -74,7 +74,7 @@ export function toCsv(state, monthId = null) {
   const rows = [[
     'Date', 'Time', 'Month', 'Type', 'Description', 'Amount', 'Currency', 'Account',
     'To account', 'Amount received', 'Received currency', 'Category',
-    'Rate to ALL', 'ALL equivalent',
+    'Rate to ALL', 'ALL equivalent', 'Price', 'Price currency',
   ]];
   const txs = state.transactions
     .filter((t) => !monthId || t.monthId === monthId)
@@ -92,6 +92,8 @@ export function toCsv(state, monthId = null) {
       t.type === 'expense' ? catName(t) : '',
       rate,
       t.type === 'transfer' ? '' : centsToInput(toAllCents(signed, t.currency, rates)),
+      t.origCurrency ? centsToInput(t.type === 'expense' ? -t.origAmount : t.origAmount) : '',
+      t.origCurrency || '',
     ]);
   }
   return '﻿' + rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';

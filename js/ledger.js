@@ -96,6 +96,14 @@ export function accountById(state, id) {
   return state.settings.accounts.find((a) => a.id === id);
 }
 
+/**
+ * What a payment cost in the currency it was priced in. A $25 subscription paid from a Lek
+ * account is stored as the 2,250 ALL actually taken (amount/currency) plus origAmount/origCurrency.
+ */
+export function priceOf(t) {
+  return t.origCurrency ? { amount: t.origAmount, currency: t.origCurrency } : { amount: t.amount, currency: t.currency };
+}
+
 /** The balance changes a single transaction causes: [[accountId, cents], ...] */
 export function txEffects(tx) {
   switch (tx.type) {
@@ -155,12 +163,18 @@ export function monthSummary(state, id) {
   const savings = zero(); // net moved into savings accounts
   const byCategory = {};
   const daily = {};
+  // Spending by the price's own currency ($25, even if paid in ALL) — for comparing with plans.
+  const spendingByPrice = zero();
+  const byCategoryPrice = {};
 
   for (const t of txs) {
     if (t.type === 'expense') {
       spending[t.currency] += t.amount;
       (byCategory[t.categoryId || ''] ??= zero())[t.currency] += t.amount;
       (daily[t.date] ??= zero())[t.currency] += t.amount;
+      const price = priceOf(t);
+      spendingByPrice[price.currency] += price.amount;
+      (byCategoryPrice[t.categoryId || ''] ??= zero())[price.currency] += price.amount;
     } else if (t.type === 'income') {
       income[t.currency] += t.amount;
     } else if (t.type === 'transfer') {
@@ -187,7 +201,7 @@ export function monthSummary(state, id) {
     id, rate, rates, count: txs.length,
     openingStatus: open.status, openingFrom: open.from,
     openingBalances: open.balances, closingBalances: closingBal,
-    opening, closing, income, spending, adjust, exchange, savings, byCategory, daily,
+    opening, closing, income, spending, adjust, exchange, savings, byCategory, daily, spendingByPrice, byCategoryPrice,
     all: {
       opening: all(opening), closing: all(closing), income: all(income),
       spending: all(spending), savings: all(savings),
@@ -261,8 +275,9 @@ const norm = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' 
 export function findPlanMatch(month, tx) {
   const kind = tx.type === 'income' ? 'income' : tx.type === 'expense' ? 'expense' : null;
   if (!kind) return null;
-  const open = (month.plan || []).filter((p) => (p.kind === 'income' ? 'income' : 'expense') === kind && !p.paid && !p.txId && p.currency === tx.currency);
-  const exact = open.find((p) => p.amount === tx.amount);
+  const price = priceOf(tx);
+  const open = (month.plan || []).filter((p) => (p.kind === 'income' ? 'income' : 'expense') === kind && !p.paid && !p.txId && p.currency === price.currency);
+  const exact = open.find((p) => p.amount === price.amount);
   if (exact) return exact;
   const d = norm(tx.description);
   if (d.length < 3) return null;
@@ -273,9 +288,9 @@ export function findPlanMatch(month, tx) {
 export function findTxMatch(state, monthId, p) {
   const type = p.kind === 'income' ? 'income' : 'expense';
   const linked = new Set((state.months[monthId]?.plan || []).map((x) => x.txId).filter(Boolean));
-  const txs = monthTxs(state, monthId).filter((t) => t.type === type && !t.link && !linked.has(t.id) && t.currency === p.currency);
+  const txs = monthTxs(state, monthId).filter((t) => t.type === type && !t.link && !linked.has(t.id) && priceOf(t).currency === p.currency);
   const n = norm(p.description);
-  return txs.find((t) => p.amount && t.amount === p.amount)
+  return txs.find((t) => p.amount && priceOf(t).amount === p.amount)
     || (n.length >= 3 ? txs.find((t) => { const d = norm(t.description); return d.length >= 3 && (d.includes(n) || n.includes(d)); }) : null)
     || null;
 }
@@ -364,6 +379,11 @@ export function validateTx(tx, accounts) {
   if (!from) return 'Choose an account';
   if (from.currency !== tx.currency) return `${from.name} holds ${from.currency}, not ${tx.currency}`;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tx.date || '') || !tx.date.startsWith(tx.monthId)) return 'Date must be inside this month';
+  if (tx.origCurrency != null) {
+    if (tx.type !== 'expense' && tx.type !== 'income') return 'Only expenses and income can be priced in another currency';
+    if (!isCurrency(tx.origCurrency) || tx.origCurrency === tx.currency) return 'Invalid original currency';
+    if (!Number.isSafeInteger(tx.origAmount) || tx.origAmount <= 0) return 'Enter the price';
+  }
   if (tx.type === 'transfer') {
     const to = acc(tx.toAccountId);
     if (!to) return 'Choose the account to transfer to';

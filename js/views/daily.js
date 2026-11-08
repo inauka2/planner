@@ -70,6 +70,10 @@ function txRow(t) {
     amount = formatMoney(-t.amount, t.currency);
     ic = 'expense';
   }
+  if (t.origCurrency) {
+    // priced in another currency: show what the bank took, and the price underneath
+    amount = `${amount}<span class="amount-sub">${formatMoney(t.origAmount, t.origCurrency)}</span>`;
+  }
   const locked = !canEdit(state, t.monthId).ok;
   return `<li class="swipe tx-li" ${locked ? '' : 'data-swipe'}>
     <div class="row tappable tx tx-${t.type} swipe-content" data-act="tx-open" data-id="${esc(t.id)}">

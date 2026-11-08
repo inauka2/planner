@@ -186,14 +186,16 @@ function incomeCard(id, m, closed) {
 // ---------- planned vs actual ----------
 function plannedVsActual(id, m, sum) {
   const plan = planTotals(m);
-  const show = shownCurrencies(plan.expense, sum.spending);
-  const over = plan.expense.ALL > 0 && sum.spending.ALL > plan.expense.ALL;
+  // compared in each price's own currency ($25 planned vs $25 paid, even if the bank took ALL)
+  const spent = sum.spendingByPrice;
+  const show = shownCurrencies(plan.expense, spent);
+  const over = ['ALL', 'EUR', 'USD'].some((c) => plan.expense[c] > 0 && spent[c] > plan.expense[c]);
   const nothingLeft = !plan.unpaid.ALL && !plan.unpaid.EUR && !plan.unpaid.USD;
   return `<section class="card">
     <div class="card-head"><h2>Planned vs actual</h2><a class="link-btn" href="#/m/${id}/buy">See plan</a></div>
     <div class="totals-2">
       ${moneyStack('Planned', plan.expense, { show })}
-      ${moneyStack('Spent', sum.spending, { show, neg: over })}
+      ${moneyStack('Spent', spent, { show, neg: over })}
     </div>
     <div class="divider"></div>
     <div class="title-row"><span class="muted small">Still to pay</span><span class="amount ${nothingLeft ? 'dim' : ''}">${pairText(plan.unpaid, { always: true })}</span></div>

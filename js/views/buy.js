@@ -116,7 +116,7 @@ function renderItems(id, m, cat, sub) {
 function summaryCard(id, cat, items) {
   const m = state.months[id];
   const planned = categoryPlanned(m, cat.id);
-  const spent = monthSummary(state, id).byCategory[cat.id] || zero();
+  const spent = monthSummary(state, id).byCategoryPrice[cat.id] || zero(); // by price currency, like the plan
   const curs = CURRENCIES.filter((c) => c === 'ALL' || planned[c] || spent[c] || cat.budget?.[c] !== undefined && cat.budget?.[c]);
   const col = (label, pair, cls = '') => `<div class="sum-col">
       <p class="eyebrow">${label}</p>

@@ -103,6 +103,7 @@ Don't use "Remove from Home Screen" or Settings → Safari → Clear History and
 - **Planned** items (budget, bills, expected income) never count as spending. Only recorded transactions do.
 - **Expense:** money leaves an account and counts once as spending.
 - **Income:** counts when you record it, which means when it's received.
+- **Paying in another currency:** an expense or income can be priced in ALL, EUR or USD and paid from any account. If the account holds another currency (e.g. dollars paid with a Lek card), you also enter what the bank actually took — the app suggests it from your rate. Balances and spending use the amount taken; plans and To Buy compare the original price (so a $25 plan matches a $25 payment).
 - **Transfer:** money moves between your own accounts and is never spending. This covers ATM withdrawals (bank → cash) and currency exchange (EUR → ALL, where you enter the amount actually received).
 - **Editing balances (✎ on Budget):** if an account has no transactions yet this month, its starting balance is set directly. Otherwise the difference is saved as a correction, which is never spending.
 - **Money owed to you** is tracked separately and only joins your balance when you mark it received. That creates an income transaction.

@@ -426,3 +426,23 @@ test('matching: a Daily expense finds the unpaid To Buy item it pays (and vice v
   s.transactions[0].link = { kind: 'plan', monthId: OCT, itemId: 'other' };
   assert.equal(findTxMatch(s, OCT, m.plan[1]), null, 'already linked transactions are not offered');
 });
+
+test('paying in USD from a Lek account: balance and spending in ALL, plans compared in USD', () => {
+  const s = freshState();
+  const m = addMonth(s, OCT, { openingBalances: { bank1: 1000000 }, rate: 97, usdRate: 90 });
+  m.plan.push({ id: 'spot', kind: 'expense', categoryId: 'subscriptions', description: 'Spotify', amount: 1199, currency: 'USD', paid: false, txId: null });
+  // $11.99 charged as 1,100 ALL by the bank
+  const t = { id: 'x1', monthId: OCT, type: 'expense', amount: 110000, currency: 'ALL', origAmount: 1199, origCurrency: 'USD', accountId: 'bank1', description: 'Spotify', date: '2026-10-05', time: '09:00', categoryId: 'subscriptions' };
+  assert.equal(validateTx(t, ACCOUNTS), null);
+  s.transactions.push(t);
+  const sum = monthSummary(s, OCT);
+  assert.equal(sum.closingBalances.bank1, 1000000 - 110000, 'the account loses what the bank took');
+  assert.deepEqual(sum.spending, { ALL: 110000, EUR: 0, USD: 0 }, 'real money spent is in ALL');
+  assert.deepEqual(sum.spendingByPrice, { ALL: 0, EUR: 0, USD: 1199 }, 'compared with plans in USD');
+  assert.deepEqual(sum.byCategoryPrice.subscriptions, { ALL: 0, EUR: 0, USD: 1199 });
+  assert.equal(findPlanMatch(m, t)?.id, 'spot', 'matches the $11.99 planned item');
+  assert.equal(findTxMatch(s, OCT, m.plan[0])?.id, 'x1');
+  assert.match(validateTx({ ...t, origCurrency: 'ALL' }, ACCOUNTS), /original currency/);
+  assert.match(validateTx({ ...t, origAmount: 0 }, ACCOUNTS), /price/);
+  assert.match(validateTx({ ...t, type: 'transfer', toAccountId: 'cash_all', toCurrency: 'ALL', toAmount: 110000 }, ACCOUNTS), /Only expenses and income/);
+});

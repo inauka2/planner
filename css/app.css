@@ -189,6 +189,9 @@ b { font-weight: 600; }
 .amount.neg { color: var(--danger); }
 .amount.pos { color: var(--accent); }
 .amount.dim { color: var(--text-2); font-weight: 400; }
+.amount-sub { display: block; font-size: 13px; font-weight: 400; color: var(--text-2); }
+.field.converted { background: var(--fill-2); border-radius: var(--r-ctl); padding: 12px; gap: 8px; }
+.field.converted .input { background: var(--fill); }
 .tappable { cursor: pointer; }
 a.row:active, .row.tappable:active { background: rgba(255, 255, 255, 0.06); }
 .faded { opacity: 0.5; }
