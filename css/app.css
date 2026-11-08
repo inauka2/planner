@@ -1044,3 +1044,9 @@ details.more > .field + .field { margin-top: 12px; }
 .btn-google .g-logo { width: 20px; height: 20px; }
 .btn-lg { min-height: 54px; font-size: 17px; }
 .auth-or { font-size: 13px; color: var(--text-3); margin-top: 8px; }
+
+/* ---------- income on Accounts ---------- */
+.income-past .acc-row { min-height: 48px; padding: 0 16px 0 18px; justify-content: space-between; }
+.income-past .mw-amt { font-size: 16px; font-weight: 500; }
+.income-past .acc-name { font-size: 16px; }
+.income-past .acc-list > li + li .acc-row::before, .income-past > li + li .acc-row::before { left: 18px; }

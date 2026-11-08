@@ -1,14 +1,14 @@
 // Accounts & Budgets tab: total money, your accounts, money owed to you, and this month's
 // budget per category. Tapping an account opens its transactions (forecast + months, running balance).
 import { state, saveSettings, ensureMonth } from '../store.js';
-import { localDateParts, getRates, accountById, nextMonthId, monthBounds, monthSummary, planTotals, MONTH_NAMES } from '../ledger.js';
+import { localDateParts, getRates, accountById, nextMonthId, prevMonthId, monthBounds, monthSummary, monthTxs, planTotals, MONTH_NAMES } from '../ledger.js';
 import { formatMoney, centsToInput, parseAmount, CURRENCIES, CURRENCY_NAMES } from '../money.js';
 import { icon } from '../icons.js';
 import { LIABILITY_KINDS, categoryStyle } from '../defaults.js';
 import { esc, registerActions, openSheet, fieldError, toast, chooseDialog, emptyState, rerender } from '../ui.js';
 import { routes } from '../routes.js';
 import {
-  balancesNow, currentBalanceMonth, accountRegister, accountForecast, searchTransactions, pairIn, budgetStatus,
+  balancesNow, currentBalanceMonth, accountRegister, accountForecast, searchTransactions, pairIn, budgetStatus, scheduledItems,
 } from '../insights.js';
 import {
   topBar, pillBtn, privacyBtn, largeTitle, accountSquare, square, txRow, statPills, monthHeading, searchField, longDate,
@@ -17,6 +17,7 @@ import { openTxSheet } from './txsheet.js';
 import { openAccountSheet, setBalances } from './accounts.js';
 import { planAccount, recordPlan } from './plan.js';
 import { openImportSheet } from './importer.js';
+import { schedRow } from './scheduled.js';
 
 let showHidden = false;
 let pageMonths = 6; // month sections shown in a register before "Show earlier"
@@ -67,6 +68,7 @@ export function renderAccounts() {
       </ul></section>
       ${archivedCount ? `<button class="text-btn" data-act="acc-toggle-hidden">${showHidden ? 'Hide' : 'Show'} ${archivedCount} hidden account${archivedCount > 1 ? 's' : ''}</button>` : ''}
 
+      ${incomeSection(t.monthId)}
       ${owedSection()}
       ${budgetSection(t.monthId)}
     </main>`;
@@ -80,6 +82,49 @@ function accountRow(a, cents) {
     <span class="acc-main"><span class="acc-name">${esc(a.name)}</span>
       <span class="acc-bal"><span class="mw-amt ${neg ? 'neg' : LIABILITY_KINDS.includes(a.kind) ? '' : 'pos-soft'}">${formatMoney(cents, a.currency)}</span>${limit}</span></span>
   </a></li>`;
+}
+
+/**
+ * This month's income: what you received (salary first in mind), what you still expect, a
+ * button to record income, and the totals of the months before.
+ */
+function incomeSection(id) {
+  const m = state.months[id];
+  if (!m) return '';
+  const s = monthSummary(state, id);
+  const t = today();
+  const received = pairIn(s.income, 'ALL', s.rates);
+  const txs = monthTxs(state, id).filter((x) => x.type === 'income')
+    .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  const expected = scheduledItems(state, id, t.date).filter((x) => x.item.kind === 'income' && !x.item.paid);
+  const toAll = (p) => pairIn({ ALL: 0, EUR: 0, USD: 0, [p.currency]: p.amount || 0 }, 'ALL', s.rates);
+  const stillExpected = expected.reduce((sum, x) => sum + toAll(x.item), 0);
+  const hasMonthly = m.plan.some((p) => p.kind === 'income' && p.recurring);
+  const name = MONTH_NAMES[Number(id.slice(5)) - 1];
+  const closed = !!m.closing;
+
+  // the six months before, newest first, only those that exist
+  const past = [];
+  for (let x = prevMonthId(id), n = 0; n < 6; n++, x = prevMonthId(x)) {
+    if (!state.months[x]) continue;
+    const ps = monthSummary(state, x);
+    past.push({ id: x, total: pairIn(ps.income, 'ALL', ps.rates) });
+  }
+
+  return `<p class="section-label"><span>Income · ${name}</span>${closed ? '' : `<button class="link-btn" data-act="daily-add" data-type="income" data-month="${id}">Record income</button>`}</p>
+    <section class="remain-card">
+      <div><p class="cap accent-cap">Received</p><p class="remain-big"><span class="mw-amt pos">${formatMoney(received, 'ALL')}</span></p></div>
+      <div><p class="cap accent-cap">Still expected</p><p class="remain-big"><span class="mw-amt">${formatMoney(stillExpected, 'ALL')}</span></p></div>
+    </section>
+    ${expected.length ? `<ul class="reg-list">${expected.map((x) => schedRow(id, x)).join('')}</ul>` : ''}
+    ${txs.length ? `<ul class="reg-list">${txs.map((x) => txRow(x)).join('')}</ul>`
+      : `<section class="group-card">${emptyState('No income recorded yet', `Record your salary when it arrives in ${name}.`, closed ? '' : `<button class="btn btn-primary" data-act="daily-add" data-type="income" data-month="${id}">${icon('income')} Record salary</button>`)}</section>`}
+    ${!hasMonthly && !closed ? `<button class="text-btn" data-act="income-add" data-month="${id}">${icon('repeat')} Set up my monthly salary</button>` : ''}
+    ${past.length ? `<p class="section-cap pad">Income in earlier months</p><section class="group-card open"><ul class="acc-list income-past">${past.map((x) => `
+      <li><a class="acc-row" href="${routes.daily(x.id)}">
+        <span class="acc-name">${MONTH_NAMES[Number(x.id.slice(5)) - 1]} ${x.id.slice(0, 4)}</span>
+        <span class="mw-amt ${x.total ? 'pos' : 'faint'}">${formatMoney(x.total, 'ALL')}</span>
+      </a></li>`).join('')}</ul></section>` : ''}`;
 }
 
 function owedSection() {

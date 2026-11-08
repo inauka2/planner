@@ -5,7 +5,7 @@ An installable, offline-first web app (PWA) for iPhone, light and dark. No backe
 
 Five simple tabs. Every page has the ⚙︎ Settings button at the top left and one blue **+** at the top right.
 
-- **Accounts & Budgets:** all your money (with a Lek / Euro / Dollar breakdown), your bank accounts and cash, money people owe you, and this month's budget: how much is left to spend, then one bar per category (spent / budget).
+- **Accounts & Budgets:** all your money (with a Lek / Euro / Dollar breakdown), your bank accounts and cash, **this month's income** (received and still expected, with *Record income*; your salary can be set up once to repeat every month, then you just tick it when it arrives; plus the totals of earlier months), money people owe you, and this month's budget: how much is left to spend, then one bar per category (spent / budget).
   - Tap an account to see its transactions with the running balance, and upcoming bills paid from it. The ••• menu edits the account, corrects its balance, transfers money or imports a bank file.
 - **Daily:** what you spent today and this month, and your income. Big **Expense**, **Income** and **Transfer** buttons, then every transaction grouped by day.
 - **Planned:** everything you plan to buy or pay this month, bills included, on one page. At the top: **Spent** and **Still to buy**. Then *Due soon* (bills due in the next 7 days or overdue), your **categories** (open one to set its budget, add items and use subcategories) and *Expected income*. Tick an item when you pay it and the payment is recorded.

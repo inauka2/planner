@@ -123,6 +123,7 @@ function applyDisplay() {
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyDisplay);
 
 export async function render() {
+  if (!state.loaded && !state.storageError) return; // still signing in / unlocking: show nothing yet
   const r = parseRoute();
   if (r.tab === 'accounts' && !r.sub && !state.months[thisMonth()]) {
     try { await ensureMonth(thisMonth()); } catch { /* the page still shows accounts */ }

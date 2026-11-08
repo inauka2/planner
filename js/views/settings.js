@@ -16,7 +16,7 @@ import { profileName, updateUser } from '../auth.js';
 import { googleEnabled, startGoogleSignIn } from '../google.js';
 import { enrollFaceId, unlockWithFaceId } from '../faceid.js';
 
-export const APP_VERSION = '2.2.0';
+export const APP_VERSION = '2.3.0';
 let persisted = null;
 
 export function renderSettings() {

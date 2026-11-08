@@ -11,6 +11,7 @@ export const state = {
   receivables: [],
   hasRestorePoint: false,
   storageError: null,
+  loaded: false, // true once load() has read the stored data; nothing is written before that
 };
 
 const listeners = new Set();
@@ -51,6 +52,7 @@ export async function load() {
       try { localStorage.removeItem('planner.signedIn'); } catch { /* ignore */ }
     }
     state.storageError = null;
+    state.loaded = true;
   } catch (e) {
     console.error(e);
     state.storageError = e;
@@ -59,6 +61,8 @@ export async function load() {
 
 /** Optimistically update UI, then persist. On failure, reload what is really stored. */
 async function write(ops, { silent = false } = {}) {
+  // Never write before the stored data is loaded: an empty in-memory month would overwrite the real one.
+  if (!state.loaded) throw new Error('Your data isn’t open yet.');
   if (!silent) emit();
   try {
     await db.batch(ops);
@@ -104,6 +108,7 @@ export function setRates({ EUR, USD }) {
 // ---------- months ----------
 export async function ensureMonth(id) {
   if (state.months[id]) return state.months[id];
+  if (!state.loaded) throw new Error('Your data isn’t open yet.');
   const m = createMonthRecord(state, id, uid);
   state.months[id] = m;
   await write([op.month(m)]);
