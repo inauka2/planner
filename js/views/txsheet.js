@@ -1,11 +1,11 @@
 // Add / edit transaction sheet: Expense, Income, Transfer. Kept deliberately minimal:
 // a new expense needs only an amount (with currency) and a description.
-import { state, saveTx, deleteTx, saveSettings, uid, linkTxToPlan } from '../store.js';
+import { state, saveTx, deleteTx, saveSettings, uid, linkTxToPlan, ensureMonth } from '../store.js';
 import { parseAmount, centsToInput, convertCents, formatMoney, formatRate, CURRENCIES } from '../money.js';
-import { canEdit, monthBounds, localDateParts, getRates, accountById, findPlanMatch } from '../ledger.js';
+import { canEdit, monthBounds, localDateParts, getRates, accountById, findPlanMatch, sourceMonthId } from '../ledger.js';
 import { openSheet, closeSheet, fieldError, toast, esc, segmented, confirmDialog, chooseDialog } from '../ui.js';
 import { openAccountSheet } from './accounts.js';
-import { ACCOUNT_KINDS } from '../defaults.js';
+import { ACCOUNT_KINDS, DEFAULT_CATEGORIES } from '../defaults.js';
 
 export const accountsFor = (currency) => state.settings.accounts.filter((a) => a.currency === currency && !a.archived);
 
@@ -45,10 +45,51 @@ function guard(monthId) {
   return true;
 }
 
+/** Categories offered for a date's month (that month's, else the latest month's). */
+function categoriesFor(monthId) {
+  const m = state.months[monthId] || state.months[sourceMonthId(state, monthId)];
+  return m?.categories?.length ? m.categories : DEFAULT_CATEGORIES;
+}
+
+function categoryOptions(monthId, selected) {
+  return `<option value="">Not categorised</option>${categoriesFor(monthId).map((c) => `<option value="${esc(c.id)}" ${c.id === selected ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}`;
+}
+
+function subOptions(monthId, catId, selected) {
+  const cat = categoriesFor(monthId).find((c) => c.id === catId);
+  return (cat?.lists || []).map((l) => `<option value="${esc(l.id)}" ${l.id === selected ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
+}
+
+/** Tags and notes, folded away so a quick expense stays quick. */
+function extraFields(tx, prefill = {}) {
+  const tags = (tx?.tags || prefill.tags || []).join(', ');
+  const notes = tx?.notes ?? '';
+  return `<details class="more" ${tags || notes ? 'open' : ''}><summary>Tags &amp; notes</summary>
+    <label class="field"><span class="label">Tags <span class="optional">comma separated</span></span>
+      <input class="input" name="tags" maxlength="120" placeholder="e.g. work, trip" value="${esc(tags)}"></label>
+    <label class="field"><span class="label">Notes</span>
+      <textarea class="input textarea" name="notes" maxlength="500" rows="2">${esc(notes)}</textarea></label>
+  </details>`;
+}
+
+function readExtra(form) {
+  const tags = [...new Set((form.tags?.value || '').split(',').map((x) => x.trim().replace(/^#/, '')).filter(Boolean))];
+  const notes = (form.notes?.value || '').trim();
+  return { tags: tags.length ? tags : undefined, notes: notes || undefined };
+}
+
+/** The month a date belongs to: created if needed, and it must be open. */
+async function monthForDate(date) {
+  const id = date.slice(0, 7);
+  if (!state.months[id]) await ensureMonth(id);
+  const c = canEdit(state, id);
+  if (!c.ok) throw new Error(c.reason);
+  return id;
+}
+
 function dateFields(monthId, date, time) {
-  const { first, last } = monthBounds(monthId);
   return `<div class="row-2">
-      <label class="field"><span class="label">Date</span><input class="input" type="date" name="date" value="${date}" min="${first}" max="${last}" required></label>
+      <label class="field"><span class="label">Date</span><input class="input" type="date" name="date" value="${date}" required></label>
       <label class="field"><span class="label">Time</span><input class="input" type="time" name="time" value="${time}" required></label>
     </div>`;
 }
@@ -63,8 +104,8 @@ const TITLES = { expense: 'Add expense', income: 'Add income', transfer: 'Move m
  * @param {object} [o.prefill]  { amount (cents) | amountText, currency, description, categoryId, accountId, preset }
  * @param {object} [o.link]     link to a plan item / buy item / receivable
  */
-export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}, link = null, onSaved = null }) {
-  if (!guard(monthId)) return;
+export function openTxSheet({ monthId = localDateParts().monthId, type = 'expense', tx = null, prefill = {}, link = null, onSaved = null }) {
+  if (tx && !guard(tx.monthId)) return;
   const t = tx ? tx.type : type;
   if (t === 'adjust') return openAdjustmentInfo(tx);
   const active = state.settings.accounts.filter((a) => !a.archived);
@@ -78,7 +119,6 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
   }
 
   const editing = !!tx;
-  const month = state.months[monthId];
   const rates = getRates(state, monthId);
   // The price may be in any currency; the account may hold another (the bank converts).
   const priced = tx?.origCurrency ? { amount: tx.origAmount, currency: tx.origCurrency } : tx ? { amount: tx.amount, currency: tx.currency } : null;
@@ -88,6 +128,7 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
   const amountText = priced ? centsToInput(priced.amount) : prefill.amountText ?? (prefill.amount ? centsToInput(prefill.amount) : '');
   const dt = tx ? { date: tx.date, time: tx.time } : defaultDateTime(monthId);
   const catId = tx?.categoryId ?? prefill.categoryId ?? '';
+  const listId = tx?.listId ?? prefill.listId ?? '';
   const isExp = t === 'expense';
 
   const body = `
@@ -110,14 +151,14 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
       <input class="input" name="charged" inputmode="decimal" placeholder="0" value="${tx?.origCurrency ? centsToInput(tx.amount) : ''}">
       <p class="hint" data-charged-hint></p>
     </div>
-    ${editing ? dateFields(monthId, dt.date, dt.time) : '<p class="hint">Date and time are recorded automatically.</p>'}
-    ${isExp && (editing || catId) ? `
+    ${isExp ? `
       <label class="field"><span class="label">Category <span class="optional">optional</span></span>
-        <select class="select" name="category">
-          <option value="">Not categorised</option>
-          ${month.categories.map((c) => `<option value="${esc(c.id)}" ${c.id === catId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
-        </select>
-      </label>` : ''}
+        <select class="select" name="category">${categoryOptions(monthId, catId)}</select>
+      </label>
+      <label class="field" data-sub ${subOptions(monthId, catId, listId) ? '' : 'hidden'}><span class="label">Subcategory</span>
+        <select class="select" name="list"><option value="">—</option>${subOptions(monthId, catId, listId)}</select></label>` : ''}
+    ${dateFields(monthId, dt.date, dt.time)}
+    ${extraFields(tx, prefill)}
     ${tx?.link ? `<p class="hint">Linked to ${tx.link.kind === 'plan' ? 'a planned item' : 'money owed to you'}. Deleting this un-ticks it.</p>` : ''}
     ${editing ? `<button type="button" class="btn btn-danger-ghost" data-act="tx-delete">Delete ${t}</button>` : ''}
   `;
@@ -157,6 +198,16 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
           sync(form);
         }
         if (e.target.name === 'account') { chargedEdited = false; sync(form); }
+        if (e.target.name === 'category' || e.target.name === 'date') {
+          const mId = (form.date.value || dt.date).slice(0, 7);
+          if (e.target.name === 'date') {
+            const keep = form.category.value;
+            form.category.innerHTML = categoryOptions(mId, keep);
+          }
+          const opts = subOptions(mId, form.category.value, form.list.value);
+          form.list.innerHTML = `<option value="">—</option>${opts}`;
+          form.querySelector('[data-sub]').hidden = !opts;
+        }
         if (e.target.name === 'type') {
           openTxSheet({ monthId, type: e.target.value, prefill: { amountText: form.amount.value, description: form.description.value } });
         }
@@ -187,11 +238,16 @@ export function openTxSheet({ monthId, type = 'expense', tx = null, prefill = {}
       const description = form.description.value.trim() || (isExp ? 'Expense' : 'Income');
       const date = form.date?.value || dt.date;
       const time = form.time?.value || dt.time;
-      const { origAmount: _oa, origCurrency: _oc, ...base } = tx || {};
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fieldError(form, 'date', 'Choose a date');
+      const txMonth = await monthForDate(date);
+      const { origAmount: _oa, origCurrency: _oc, tags: _tg, notes: _nt, ...base } = tx || {};
+      const extra = readExtra(form);
       const record = {
         ...base, ...orig,
-        id: tx?.id ?? uid(), monthId, type: t, amount: money.amount, currency: money.currency, accountId: a.id, description, date, time,
+        id: tx?.id ?? uid(), monthId: txMonth, type: t, amount: money.amount, currency: money.currency, accountId: a.id, description, date, time,
         categoryId: form.category ? form.category.value || null : catId || null,
+        listId: form.list && !form.list.closest('[hidden]') ? form.list.value || null : null,
+        ...(extra.tags ? { tags: extra.tags } : {}), ...(extra.notes ? { notes: extra.notes } : {}),
         createdAt: tx?.createdAt ?? new Date().toISOString(),
       };
       await saveTx(record, link);
@@ -265,7 +321,7 @@ function openTransferSheet({ monthId, tx, prefill }) {
   const editing = !!tx;
   const rates = getRates(state, monthId);
   const [pf, pt] = presetAccounts(prefill.preset || 'atm');
-  const fromId = tx?.accountId ?? pf?.id;
+  const fromId = tx?.accountId ?? prefill.accountId ?? pf?.id;
   const toId = tx?.toAccountId ?? pt?.id;
   const dt = tx ? { date: tx.date, time: tx.time } : defaultDateTime(monthId);
   const amountText = tx ? centsToInput(tx.amount) : prefill.amountText ?? '';
@@ -290,7 +346,7 @@ function openTransferSheet({ monthId, tx, prefill }) {
     <label class="field"><span class="label">Note <span class="optional">optional</span></span>
       <input class="input" name="description" maxlength="120" placeholder="e.g. ATM withdrawal" value="${esc(tx?.description ?? '')}">
     </label>
-    ${editing ? dateFields(monthId, dt.date, dt.time) : ''}
+    ${dateFields(monthId, dt.date, dt.time)}
     <p class="hint">Moving money between your own accounts is never counted as spending.</p>
     ${editing ? `<button type="button" class="btn btn-danger-ghost" data-act="tx-delete">Delete transfer</button>` : ''}
   `;
@@ -364,12 +420,15 @@ function openTransferSheet({ monthId, tx, prefill }) {
       const isAtm = from.kind === 'bank' && to.kind === 'cash' && from.currency === to.currency;
       const description = form.description.value.trim() ||
         (isAtm ? 'ATM withdrawal' : to.kind === 'savings' ? 'To savings' : from.currency !== to.currency ? 'Currency exchange' : 'Transfer');
+      const date = form.date?.value || dt.date;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fieldError(form, 'date', 'Choose a date');
+      const txMonth = await monthForDate(date);
       const record = {
         ...(tx || {}),
-        id: tx?.id ?? uid(), monthId, type: 'transfer',
+        id: tx?.id ?? uid(), monthId: txMonth, type: 'transfer',
         amount: amt.cents, currency: from.currency, accountId: from.id,
         toAccountId: to.id, toAmount, toCurrency: to.currency,
-        description, date: form.date?.value || dt.date, time: form.time?.value || dt.time,
+        description, date, time: form.time?.value || dt.time,
         createdAt: tx?.createdAt ?? new Date().toISOString(),
       };
       await saveTx(record);

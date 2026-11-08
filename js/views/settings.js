@@ -7,10 +7,13 @@ import { icon } from '../icons.js';
 import { esc, registerActions, actions, openSheet, fieldError, toast, confirmDialog } from '../ui.js';
 import { localDateParts } from '../ledger.js';
 import { openAccountSheet } from './accounts.js';
+import { topBar, largeTitle, statusLine, accountSquare } from './chrome.js';
+import { openImportSheet } from './importer.js';
+import { segmented, actions as allActions } from '../ui.js';
 import { user } from '../app.js';
 import { changePassword } from '../auth.js';
 
-export const APP_VERSION = '1.8.0';
+export const APP_VERSION = '2.0.0';
 let persisted = null;
 
 export function renderSettings() {
@@ -21,21 +24,34 @@ export function renderSettings() {
   });
 
   return `
-    <header class="topbar">
-      <a class="glass-btn" href="#/" aria-label="Back">${icon('chev-left')}</a>
-      <span class="title-plain">Settings</span>
-      <span class="topbar-spacer"></span>
-    </header>
+    ${topBar({})}
     <main class="content">
+      ${largeTitle('Settings', statusLine())}
       <p class="section-label"><span>Accounts</span></p>
       <ul class="list card flush">${s.accounts.map((a) => `
-        <li class="row tappable ${a.archived ? 'faded' : ''}" data-act="acc-open" data-id="${esc(a.id)}">
+        <li class="row tappable has-icon ${a.archived ? 'faded' : ''}" data-act="acc-open" data-id="${esc(a.id)}">
+          ${accountSquare(a)}
           <div class="row-main"><span class="row-title">${esc(a.name)}</span><span class="row-sub">${ACCOUNT_KINDS[a.kind] || 'Account'} · ${a.currency}${a.archived ? ' · hidden' : ''}</span></div>
           <span class="row-end">${icon('chev-right')}</span>
         </li>`).join('')}
         <li class="row tappable" data-act="acc-add"><span class="accent">${icon('plus', 'ic-xs')} Add account</span></li>
+        <li class="row tappable" data-act="group-new"><span class="accent">${icon('folder-plus', 'ic-xs')} New account group</span></li>
       </ul>
       <p class="hint" style="padding:0 16px">Add each account once. A balance you type here applies to the current month.</p>
+
+      <p class="section-label"><span>Display</span></p>
+      <ul class="list card flush">
+        <li class="row"><div class="row-main"><span class="row-title">Appearance</span></div>
+          ${segmented('theme', [['system', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], s.theme || 'system', { small: true, cls: 'seg-theme' })}</li>
+        <li class="row tappable" data-act="privacy-toggle"><div class="row-main"><span class="row-title">Privacy mode</span><span class="row-sub">Hides every amount — handy in public. Also the ${icon('eye', 'ic-xs')} button at the top.</span></div>
+          <span class="switch"><input type="checkbox" ${s.privacy ? 'checked' : ''} tabindex="-1"><span></span></span></li>
+      </ul>
+
+      <p class="section-label"><span>Data</span></p>
+      <ul class="list card flush">
+        <li class="row tappable" data-act="import-open"><div class="row-main"><span class="row-title">Import transactions</span><span class="row-sub">CSV, OFX, QFX or QIF from your bank</span></div><span class="row-end">${icon('chev-right')}</span></li>
+        <li class="row tappable" data-act="cats-open"><div class="row-main"><span class="row-title">Categories</span><span class="row-sub">Rename, add or remove spending categories</span></div><span class="row-end">${icon('chev-right')}</span></li>
+      </ul>
 
       ${user ? `<p class="section-label"><span>Account</span></p>
       <ul class="list card flush">
@@ -83,6 +99,14 @@ export function renderSettings() {
 }
 
 registerActions({
+  'import-open': () => openImportSheet(),
+  'cats-open': async () => {
+    const id = localDateParts().monthId;
+    await ensureMonth(id);
+    const btn = document.createElement('button');
+    btn.dataset.month = id;
+    allActions['cats-edit'](btn);
+  },
   'pw-change': () => openSheet({
     title: 'Change password',
     body: `<label class="field"><span class="label">Current password</span><input class="input" type="password" name="cur" autocomplete="current-password" autocapitalize="none" autofocus></label>

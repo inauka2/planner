@@ -1,5 +1,6 @@
 // Tab 1 — Budget: my current finances only. Balances (Lek and Euro), money owed to me,
 // expected income, and planned vs actual spending.
+import { routes } from '../routes.js';
 import { state, updateMonth, saveReceivable, deleteReceivable, uid } from '../store.js';
 import { monthSummary, planTotals, canEdit, sourceMonthId, monthLabel } from '../ledger.js';
 import { parseAmount, formatMoney, centsToInput, CURRENCIES, CURRENCY_NAMES } from '../money.js';
@@ -192,7 +193,7 @@ function plannedVsActual(id, m, sum) {
   const over = ['ALL', 'EUR', 'USD'].some((c) => plan.expense[c] > 0 && spent[c] > plan.expense[c]);
   const nothingLeft = !plan.unpaid.ALL && !plan.unpaid.EUR && !plan.unpaid.USD;
   return `<section class="card">
-    <div class="card-head"><h2>Planned vs actual</h2><a class="link-btn" href="#/m/${id}/buy">See plan</a></div>
+    <div class="card-head"><h2>Planned vs actual</h2><a class="link-btn" href="${routes.budgets(id)}">See plan</a></div>
     <div class="totals-2">
       ${moneyStack('Planned', plan.expense, { show })}
       ${moneyStack('Spent', spent, { show, neg: over })}

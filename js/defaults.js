@@ -15,7 +15,36 @@ export const LEGACY_DEFAULT_ACCOUNTS = [
   { id: 'cash_usd', name: 'Cash USD', currency: 'USD', kind: 'cash' },
 ];
 
-export const ACCOUNT_KINDS = { bank: 'Bank', cash: 'Cash', savings: 'Savings' };
+export const ACCOUNT_KINDS = {
+  bank: 'Bank', cash: 'Cash', savings: 'Savings', credit: 'Credit card', loan: 'Loan / debt', investment: 'Investment', other: 'Other',
+};
+/** Default account groups (one per type) on the Accounts screen, in this order. */
+export const KIND_GROUPS = {
+  bank: 'Banking', cash: 'Cash', savings: 'Savings', credit: 'Credit Cards', loan: 'Loans & Debts', investment: 'Investments', other: 'Other',
+};
+/** Account types whose balance is usually money you owe. */
+export const LIABILITY_KINDS = ['credit', 'loan'];
+/** Square icon colour per account type. */
+export const KIND_COLORS = {
+  bank: '#007aff', cash: '#34c759', savings: '#ff9500', credit: '#5856d6', loan: '#ff3b30', investment: '#30b0c7', other: '#8e8e93',
+};
+
+/** Colour + icon of each spending category (custom categories get a colour by position). */
+const CATEGORY_STYLE = {
+  necessary: ['#ff9500', 'cat-necessary'], subscriptions: ['#af52de', 'cat-subscriptions'], selfcare: ['#ff2d55', 'cat-selfcare'],
+  fun: ['#34c759', 'cat-fun'], other: ['#8e8e93', 'cat-other'],
+};
+const CATEGORY_COLORS = ['#007aff', '#5ac8fa', '#ffcc00', '#a2845e', '#30b0c7', '#ff6482', '#64d2ff', '#bf5af2'];
+export function categoryStyle(catId, index = 0) {
+  if (!catId) return { color: '#8e8e93', icon: 'cat-other' };
+  const [color, ic] = CATEGORY_STYLE[catId] || [CATEGORY_COLORS[Math.abs(hashCode(catId) + index) % CATEGORY_COLORS.length], 'cat-custom'];
+  return { color, icon: ic };
+}
+function hashCode(s) {
+  let h = 0;
+  for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  return h;
+}
 
 export const SELFCARE_ID = 'selfcare';
 /** Categories whose items are bills (paid, repeat monthly) rather than purchases (bought). */
@@ -67,6 +96,10 @@ export function defaultSettings() {
     lastCurrency: 'ALL',
     activityIdeas: [],
     lastBackupAt: null,
+    accountGroups: [], // custom groups [{ id, name }]; accounts without a group are grouped by type
+    hiddenGroups: [], // group keys left out of the net-worth total (the eye on each group)
+    privacy: false, // hide every amount
+    theme: 'system', // 'system' | 'light' | 'dark'
   };
 }
 
@@ -83,6 +116,8 @@ export function normalizeSettings(s) {
       income: { ...d.defaultAccounts.income, ...(s.defaultAccounts?.income || {}) },
     },
     activityIdeas: Array.isArray(s.activityIdeas) ? s.activityIdeas : [],
+    accountGroups: Array.isArray(s.accountGroups) ? s.accountGroups : [],
+    hiddenGroups: Array.isArray(s.hiddenGroups) ? s.hiddenGroups : [],
   };
 }
 

@@ -1,5 +1,6 @@
 // Tab 3 — To Buy: what I plan to spend money on this month, by category.
 // Root → category → (Self-care) subcategory, iOS-style drill-down.
+import { routes } from '../routes.js';
 import { state, updateMonth, uid } from '../store.js';
 import { monthSummary, planTotals, sourceMonthId, monthLabel, categoryPlanned } from '../ledger.js';
 import { formatMoney, parseAmount, centsToInput, CURRENCIES } from '../money.js';
@@ -40,9 +41,6 @@ function renderRoot(id, m) {
   const t = totalsOf(items);
   t.planned = planTotals(m).expense;
   const closed = !!m.closing;
-  const src = sourceMonthId(state, id);
-  const recurring = closed ? [] : missingRecurring(state, id).filter((p) => p.kind !== 'income');
-  const unfinished = closed ? [] : missingUnfinished(state, id);
 
   return `
     <h1 class="large-title">To Buy</h1>
@@ -54,10 +52,7 @@ function renderRoot(id, m) {
       ${t.count ? `<p class="hint">${t.open} of ${t.count} item${t.count > 1 ? 's' : ''} left</p>` : ''}
     </section>
 
-    ${recurring.length || unfinished.length ? `<div class="stack">
-      ${recurring.length ? `<button class="btn btn-tinted btn-block" data-act="buy-copy-recurring" data-month="${id}">${icon('repeat')} Copy ${recurring.length} monthly bill${recurring.length > 1 ? 's' : ''} from ${monthLabel(src).split(' ')[0]}</button>` : ''}
-      ${unfinished.length ? `<button class="btn btn-ghost btn-block" data-act="buy-bring" data-month="${id}">Bring ${unfinished.length} unbought item${unfinished.length > 1 ? 's' : ''} from ${monthLabel(src).split(' ')[0]}</button>` : ''}
-    </div>` : ''}
+    ${carryButtons(id)}
 
     <ul class="list card flush">
       ${m.categories.map((c) => {
@@ -65,7 +60,7 @@ function renderRoot(id, m) {
         ct.planned = categoryPlanned(m, c.id);
         const subline = ct.count ? `${ct.count} item${ct.count > 1 ? 's' : ''}${ct.open && ct.open < ct.count ? ` · ${ct.open} left` : ct.open ? '' : ' · all done'}`
           : c.lists?.length ? `${c.lists.length} subcategories` : 'Nothing planned';
-        return `<li><a class="row has-icon" href="#/m/${id}/buy/${esc(c.id)}">
+        return `<li><a class="row has-icon" href="${routes.budgets(id, c.id)}">
           <span class="icon-tile">${categoryIcon(c.id)}</span>
           <div class="row-main"><span class="row-title">${esc(c.name)}</span><span class="row-sub">${subline}</span></div>
           <span class="row-end">${amountText(ct.planned)}${icon('chev-right')}</span>
@@ -76,19 +71,33 @@ function renderRoot(id, m) {
   `;
 }
 
+/** "Copy monthly bills / bring unbought items from last month" buttons (or ''). */
+export function carryButtons(id, { income = false } = {}) {
+  const m = state.months[id];
+  if (m.closing) return '';
+  const src = sourceMonthId(state, id);
+  const recurring = missingRecurring(state, id).filter((p) => income || p.kind !== 'income');
+  const unfinished = income ? [] : missingUnfinished(state, id);
+  if (!recurring.length && !unfinished.length) return '';
+  return `<div class="stack">
+      ${recurring.length ? `<button class="btn btn-tinted btn-block" data-act="buy-copy-recurring" data-month="${id}" ${income ? 'data-income="1"' : ''}>${icon('repeat')} Copy ${recurring.length} monthly item${recurring.length > 1 ? 's' : ''} from ${monthLabel(src).split(' ')[0]}</button>` : ''}
+      ${unfinished.length ? `<button class="btn btn-ghost btn-block" data-act="buy-bring" data-month="${id}">Bring ${unfinished.length} unbought item${unfinished.length > 1 ? 's' : ''} from ${monthLabel(src).split(' ')[0]}</button>` : ''}
+    </div>`;
+}
+
 // ---------- Self-care: subcategories ----------
 function renderSelfcare(id, m, cat) {
   const items = expenseItems(m).filter((p) => p.categoryId === cat.id);
   const loose = items.filter((p) => !p.listId || !cat.lists.some((l) => l.id === p.listId));
   return `
-    <a class="back-link" href="#/m/${id}/buy">${icon('chev-left')} To Buy</a>
+    <a class="back-link" href="${routes.budgets(id)}">${icon('chev-left')} Budgets</a>
     <div class="title-row"><h1 class="large-title">${esc(cat.name)}</h1>
       ${m.closing ? '' : `<button class="glass-btn sm" data-act="cat-edit" data-month="${id}" data-cat="${esc(cat.id)}" aria-label="Rename">${icon('edit')}</button>`}</div>
     ${summaryCard(id, cat, items)}
     <ul class="list card flush">
       ${cat.lists.map((l) => {
         const lt = totalsOf(items.filter((p) => p.listId === l.id));
-        return `<li><a class="row" href="#/m/${id}/buy/${esc(cat.id)}/${esc(l.id)}">
+        return `<li><a class="row" href="${routes.budgets(id, cat.id, l.id)}">
           <div class="row-main"><span class="row-title">${esc(l.name)}</span>${lt.count ? `<span class="row-sub">${lt.open ? `${lt.open} to buy` : 'all bought'}</span>` : ''}</div>
           <span class="row-end">${amountText(lt.planned)}${icon('chev-right')}</span>
         </a></li>`;
@@ -104,7 +113,7 @@ function renderItems(id, m, cat, sub) {
   const items = expenseItems(m).filter((p) => p.categoryId === cat.id && (!sub || p.listId === sub.id));
   const closed = !!m.closing;
   return `
-    <a class="back-link" href="#/m/${id}/buy${sub ? `/${esc(cat.id)}` : ''}">${icon('chev-left')} ${sub ? esc(cat.name) : 'To Buy'}</a>
+    <a class="back-link" href="${sub ? routes.budgets(id, cat.id) : routes.budgets(id)}">${icon('chev-left')} ${sub ? esc(cat.name) : 'Budgets'}</a>
     <div class="title-row"><h1 class="large-title">${esc(sub ? sub.name : cat.name)}</h1>
       ${closed ? '' : `<button class="glass-btn sm" data-act="${sub ? 'sub-edit' : 'cat-edit'}" data-month="${id}" data-cat="${esc(cat.id)}" ${sub ? `data-list="${esc(sub.id)}"` : ''} aria-label="Rename">${icon('edit')}</button>`}</div>
     ${sub ? '' : summaryCard(id, cat, items)}
@@ -142,7 +151,7 @@ function summaryCard(id, cat, items) {
   </section>`;
 }
 
-function itemList(id, items) {
+export function itemList(id, items) {
   const closed = !!state.months[id].closing;
   const sorted = [...items].sort((a, b) => Number(a.paid) - Number(b.paid));
   return `<ul class="list card flush">${sorted.map((p) => {
@@ -220,7 +229,7 @@ registerActions({
   'plan-swipe-delete': (el) => removePlanItem(el.dataset.month, el.dataset.id),
   'buy-copy-recurring': async (el) => {
     const id = el.dataset.month;
-    const items = missingRecurring(state, id).filter((p) => p.kind !== 'income');
+    const items = missingRecurring(state, id).filter((p) => el.dataset.income || p.kind !== 'income');
     await updateMonth(id, (mm) => { for (const p of items) mm.plan.push({ ...p, id: uid(), paid: false, txId: null }); }, { financial: true });
     toast(`Copied ${items.length} (not paid yet)`);
   },
@@ -250,7 +259,7 @@ registerActions({
         const ok = await confirmDialog({ title: `Delete “${esc(cat.name)}”?`, message: `Only in ${monthLabel(id)} and months created after it.`, confirmLabel: 'Delete', danger: true });
         if (!ok) return;
         await updateMonth(id, (mm) => { mm.categories = mm.categories.filter((c) => c.id !== catId); }, { financial: true });
-        location.hash = `#/m/${id}/buy`;
+        location.hash = routes.budgets(id);
       },
     });
   },
@@ -272,7 +281,7 @@ registerActions({
       onDelete: async () => {
         if (used) return toast('Remove its items first');
         await updateMonth(id, (mm) => { const c = findCategory(mm, catId); c.lists = c.lists.filter((l) => l.id !== listId); }, { financial: true });
-        location.hash = `#/m/${id}/buy/${catId}`;
+        location.hash = routes.budgets(id, catId);
       },
     });
   },

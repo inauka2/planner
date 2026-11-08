@@ -1,5 +1,6 @@
 // Tab 4 — To Do, like iOS Reminders: a grid of list tiles; tapping one opens the list,
 // where tasks are typed one after another in the "New task" line.
+import { routes } from '../routes.js';
 import { state, updateMonth, uid, saveSettings } from '../store.js';
 import { parseAmount, formatMoney, centsToInput } from '../money.js';
 import { recordPlan } from './plan.js';
@@ -36,7 +37,7 @@ function renderGrid(id, m) {
     <div class="tile-grid">
       ${m.todoLists.map((l, i) => {
         const { color, icon: ic } = listStyle(l, i);
-        return `<a class="tile" href="#/m/${id}/todo/${esc(l.id)}" style="--c:${color}">
+        return `<a class="tile" href="${routes.todo(id, l.id)}" style="--c:${color}">
           <span class="tile-top"><span class="tile-icon">${icon(ic)}</span><span class="tile-count">${openCount(l)}</span></span>
           <span class="tile-name">${esc(l.name)}</span>
         </a>`;
@@ -72,7 +73,7 @@ function renderList(id, m, l) {
   const done = l.items.filter((it) => it.done);
   const today = localDateParts().date;
   return `
-    <a class="back-link" href="#/m/${id}/todo">${icon('chev-left')} To Do</a>
+    <a class="back-link" href="${routes.todo(id)}">${icon('chev-left')} To Do</a>
     <div class="title-row">
       <h1 class="large-title" style="color:${color}">${esc(l.name)}</h1>
       <button class="glass-btn sm" data-act="todo-list-menu" data-month="${id}" data-list="${esc(l.id)}" aria-label="Rename or delete list">${icon('edit')}</button>
@@ -269,7 +270,7 @@ registerActions({
     nameSheet('New list', '', async (name) => {
       const listId = uid();
       await updateMonth(id, (mm) => { mm.todoLists.push({ id: listId, name, items: [] }); });
-      location.hash = `#/m/${id}/todo/${listId}`;
+      location.hash = routes.todo(id, listId);
     });
   },
   'todo-list-menu': (el) => {
@@ -292,7 +293,7 @@ registerActions({
           }
           const idx = state.months[id].todoLists.findIndex((x) => x.id === l.id);
           await updateMonth(id, (mm) => { mm.todoLists = mm.todoLists.filter((x) => x.id !== l.id); });
-          location.hash = `#/m/${id}/todo`;
+          location.hash = routes.todo(id);
           toast('List deleted', { actionLabel: 'Undo', onAction: () => updateMonth(id, (mm) => { mm.todoLists.splice(idx, 0, l); }) });
         },
       },

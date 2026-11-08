@@ -55,6 +55,13 @@ function itemForm(m, p, { kind, categoryId, listId, pickCategory }) {
         <select class="select" name="list">${subOptions(cat, p?.listId ?? listId)}</select></label>` : ''}
     ${kind === 'expense' ? `<div class="field" data-prio ${bill ? 'hidden' : ''}><span class="label">Priority <span class="optional">optional</span></span>
       ${segmented('priority', [['', 'None'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']], p?.priority ?? '', { small: true, cls: 'seg-prio' })}</div>` : ''}
+    <div class="row-2">
+      <label class="field"><span class="label">Due day <span class="optional">optional</span></span>
+        <input class="input" name="dueDay" inputmode="numeric" maxlength="2" placeholder="e.g. 5" value="${p?.dueDay ?? ''}"></label>
+      <label class="field"><span class="label">${kind === 'income' ? 'Into' : 'Pay from'}</span>
+        <select class="select" name="planAccount"><option value="">Automatic</option>${state.settings.accounts.filter((a) => !a.archived || a.id === p?.accountId)
+          .map((a) => `<option value="${esc(a.id)}" ${a.id === p?.accountId ? 'selected' : ''}>${esc(a.name)} · ${a.currency}</option>`).join('')}</select></label>
+    </div>
     ${switchRow('recurring', recurring, 'Repeats every month', `Copied to new months as not ${kind === 'income' ? 'received' : bill ? 'paid' : 'bought'}`)}`;
 }
 
@@ -67,7 +74,12 @@ function readItem(form, kind, fixed) {
     if (!a.ok) return fieldError(form, 'amount', a.error);
     amount = a.cents;
   }
-  const out = { description, amount, currency: form.currency.value, recurring: form.recurring.checked };
+  let dueDay = null;
+  if (form.dueDay?.value.trim()) {
+    dueDay = Number(form.dueDay.value.trim());
+    if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) return fieldError(form, 'dueDay', 'A day from 1 to 31');
+  }
+  const out = { description, amount, currency: form.currency.value, recurring: form.recurring.checked, dueDay, accountId: form.planAccount?.value || null };
   if (kind === 'expense') {
     out.categoryId = form.category ? form.category.value : fixed.categoryId;
     out.listId = form.list && !form.list.closest('[hidden]') ? form.list.value || null : fixed.listId ?? null;
@@ -146,10 +158,16 @@ export function openPlanItem(id, itemId) {
   });
 }
 
+/** The account a planned item is paid from / received into. */
+export function planAccount(p) {
+  const own = p.accountId && state.settings.accounts.find((a) => a.id === p.accountId && !a.archived);
+  return own ? own.id : defaultAccount(p.kind, p.currency);
+}
+
 export function recordPlan(id, p) {
   openTxSheet({
     monthId: id, type: p.kind,
-    prefill: { amount: p.amount || undefined, currency: p.currency, description: p.description, accountId: defaultAccount(p.kind, p.currency), categoryId: p.categoryId },
+    prefill: { amount: p.amount || undefined, currency: p.currency, description: p.description, accountId: planAccount(p), categoryId: p.categoryId, listId: p.listId },
     link: { kind: 'plan', monthId: id, itemId: p.id },
   });
 }
@@ -178,7 +196,7 @@ export async function tickPlan(id, p) {
     await updateMonth(id, (mm) => { const x = mm.plan.find((q) => q.id === p.id); x.paid = false; x.txId = null; }, { financial: true });
     return;
   }
-  const acc = defaultAccount(p.kind, p.currency);
+  const acc = planAccount(p);
   const match = findTxMatch(state, id, p);
   const choice = await chooseDialog({
     title: `${word[0].toUpperCase() + word.slice(1)}: ${p.description}`,

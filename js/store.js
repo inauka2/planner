@@ -150,6 +150,20 @@ export function saveTx(tx, link = null) {
   return write([op.tx(record), ...(link && !existing ? linkOps(link, record.id, true) : [])]);
 }
 
+/** Save many new transactions in one write (imports). Invalid ones are skipped. Returns the count saved. */
+export async function saveTxBatch(txs) {
+  const now = nowIso();
+  const ok = [];
+  for (const tx of txs) {
+    if (!canEdit(state, tx.monthId).ok || validateTx(tx, state.settings.accounts)) continue;
+    ok.push({ ...tx, link: null, updatedAt: now });
+  }
+  if (!ok.length) return 0;
+  state.transactions = [...state.transactions, ...ok];
+  await write(ok.map(op.tx));
+  return ok.length;
+}
+
 /** Mark a planned item as paid by an existing transaction (instead of recording it again). */
 export function linkTxToPlan(txId, monthId, planId) {
   assertOk(canEdit(state, monthId));
