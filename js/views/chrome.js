@@ -8,6 +8,7 @@ import { categoryStyle, KIND_COLORS } from '../defaults.js';
 import { esc } from '../ui.js';
 import { categoryName, subcategoryName } from '../insights.js';
 import { user } from '../app.js';
+import { profileName } from '../auth.js';
 
 const MON = MONTH_NAMES.map((n) => n.slice(0, 3));
 
@@ -22,7 +23,7 @@ export function pillBtn({ act = '', href = '', ic, label, primary = false, attrs
 export const privacyBtn = () => pillBtn({ act: 'privacy-toggle', ic: state.settings.privacy ? 'eye-off' : 'eye', label: state.settings.privacy ? 'Show amounts' : 'Hide amounts' });
 
 function avatar() {
-  const letter = (user?.email || '?').trim()[0]?.toUpperCase() || '?';
+  const letter = profileName(user).trim()[0]?.toUpperCase() || '?';
   return `<a class="avatar" href="#/settings" aria-label="Settings">${esc(letter)}</a>`;
 }
 
@@ -46,8 +47,7 @@ export function largeTitle(title, subtitle = '') {
 }
 
 export function statusLine() {
-  const email = user?.email ? esc(user.email.split('@')[0]) : 'On this device';
-  return `${email} / ${icon('check', 'ic-xs')} Up to date`;
+  return `${esc(profileName(user))} / ${icon('check', 'ic-xs')} Up to date`;
 }
 
 /** ‹ November 2026 › — links built by `hrefFor(monthId)`. */

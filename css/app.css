@@ -596,6 +596,7 @@ body.authing { overflow: hidden; }
 .auth-icon { width: 76px; height: 76px; border-radius: 18px; margin-bottom: 6px; }
 .auth h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.025em; text-align: center; }
 .auth-text { color: var(--text-2); font-size: 15px; text-align: center; line-height: 1.4; max-width: 320px; }
+.auth-list { width: 100%; margin-top: 10px; text-align: left; }
 .auth-form { width: 100%; display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
 .auth-group { display: flex; flex-direction: column; gap: 10px; }
 .auth-field { display: flex; flex-direction: column; gap: 6px; }

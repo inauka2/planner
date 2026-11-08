@@ -1,10 +1,9 @@
-// On-device accounts. Each account (email + password) has its own data database on this
-// iPhone. Signing in once keeps you signed in until you log out. Nothing is sent anywhere.
-import { hashPassword, verifyPassword, normalizeEmail, checkEmail, checkNewPassword } from './passwords.js';
+// On-device profiles, no passwords. Each profile has its own data database on this iPhone.
+// The app opens straight into the last-used profile; nothing is sent anywhere.
 
 const AUTH_DB = 'planner-auth';
-const FIRST_DATA_DB = 'monthly-planner'; // the first account adopts data saved before accounts existed
-const SESSION_KEY = 'planner.session'; // mirror of the session, so sign-in really happens only once
+const FIRST_DATA_DB = 'monthly-planner'; // the first profile adopts data saved before profiles existed
+const SESSION_KEY = 'planner.session'; // mirror of the session in localStorage
 
 let authDb = null;
 function open() {
@@ -35,9 +34,10 @@ async function run(store, mode, fn) {
   });
 }
 
-const allUsers = () => run('users', 'readonly', (s) => s.getAll());
+/** All profiles on this iPhone, oldest first. */
+export const allUsers = async () => (await run('users', 'readonly', (s) => s.getAll()))
+  .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 const putUser = (u) => run('users', 'readwrite', (s) => s.put(u));
-const findUser = async (email) => (await allUsers()).find((u) => u.email === normalizeEmail(email));
 
 async function setSession(userId) {
   try {
@@ -47,7 +47,7 @@ async function setSession(userId) {
   await run('kv', 'readwrite', (s) => (userId ? s.put({ key: 'session', userId }) : s.delete('session')));
 }
 
-/** The signed-in account, or null. */
+/** The profile in use, or null. */
 export async function currentUser() {
   let id = (await run('kv', 'readonly', (s) => s.get('session')))?.userId;
   if (!id) { try { id = localStorage.getItem(SESSION_KEY); } catch { /* ignore */ } }
@@ -55,57 +55,30 @@ export async function currentUser() {
   return (await allUsers()).find((u) => u.id === id) || null;
 }
 
-export async function hasAccounts() {
-  return (await allUsers()).length > 0;
-}
-
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
-export async function signUp(email, password) {
-  const err = checkEmail(email) || checkNewPassword(password);
-  if (err) throw new Error(err);
-  if (await findUser(email)) throw new Error('An account with this email already exists on this iPhone. Sign in instead.');
-  const users = await allUsers();
-  const id = newId();
-  const user = {
-    id, email: normalizeEmail(email), createdAt: new Date().toISOString(),
-    dataDb: users.some((u) => u.dataDb === FIRST_DATA_DB) ? `monthly-planner-${id}` : FIRST_DATA_DB,
-    ...(await hashPassword(password)),
-  };
-  await putUser(user);
-  await setSession(id);
-  return user;
-}
-
-export async function signIn(email, password) {
-  const err = checkEmail(email);
-  if (err) throw new Error(err);
-  const user = await findUser(email);
-  if (!user) throw new Error('No account with this email on this iPhone.');
-  if (!(await verifyPassword(user, password))) throw new Error('Wrong password.');
-  await setSession(user.id);
-  return user;
-}
-
 /**
- * The account lives only on this iPhone, so there is no email to send a reset link from.
- * Knowing the account's email is enough to choose a new password — your data is never locked away.
+ * Open without a password: the profile in use, else the only profile, else a new one.
+ * Returns null only when several profiles exist and none is in use, so the person can pick.
  */
-export async function resetPassword(email, password) {
-  const err = checkEmail(email) || checkNewPassword(password);
-  if (err) throw new Error(err);
-  const user = await findUser(email);
-  if (!user) throw new Error('No account with this email on this iPhone.');
-  await putUser({ ...user, ...(await hashPassword(password)) });
+export async function startSession() {
+  const cur = await currentUser();
+  if (cur) return cur;
+  const users = await allUsers();
+  if (users.length === 1) { await setSession(users[0].id); return users[0]; }
+  if (users.length > 1) return null;
+  const user = { id: newId(), email: '', createdAt: new Date().toISOString(), dataDb: FIRST_DATA_DB };
+  await putUser(user);
   await setSession(user.id);
   return user;
 }
 
-export async function changePassword(user, current, next) {
-  if (!(await verifyPassword(user, current))) throw new Error('That’s not your current password.');
-  const err = checkNewPassword(next);
-  if (err) throw new Error(err);
-  await putUser({ ...user, ...(await hashPassword(next)) });
+export async function useProfile(id) {
+  const user = (await allUsers()).find((u) => u.id === id);
+  if (!user) throw new Error('That profile no longer exists.');
+  await setSession(user.id);
+  return user;
 }
 
-export const logOut = () => setSession(null);
+/** A display name for a profile: the part of its email before @, or “This iPhone”. */
+export const profileName = (u) => (u?.email ? u.email.split('@')[0] : 'This iPhone');

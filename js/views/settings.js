@@ -10,10 +10,10 @@ import { openAccountSheet } from './accounts.js';
 import { topBar, largeTitle, statusLine, accountSquare } from './chrome.js';
 import { openImportSheet } from './importer.js';
 import { segmented, actions as allActions } from '../ui.js';
-import { user } from '../app.js';
-import { changePassword } from '../auth.js';
+import { user, profiles } from '../app.js';
+import { profileName } from '../auth.js';
 
-export const APP_VERSION = '2.0.0';
+export const APP_VERSION = '2.0.1';
 let persisted = null;
 
 export function renderSettings() {
@@ -53,11 +53,10 @@ export function renderSettings() {
         <li class="row tappable" data-act="cats-open"><div class="row-main"><span class="row-title">Categories</span><span class="row-sub">Rename, add or remove spending categories</span></div><span class="row-end">${icon('chev-right')}</span></li>
       </ul>
 
-      ${user ? `<p class="section-label"><span>Account</span></p>
+      ${user ? `<p class="section-label"><span>Profile</span></p>
       <ul class="list card flush">
-        <li class="row has-icon"><span class="icon-tile">${icon('user')}</span><div class="row-main"><span class="row-title">${esc(user.email)}</span><span class="row-sub">Signed in on this iPhone · since ${esc(user.createdAt.slice(0, 10))}</span></div></li>
-        <li class="row tappable" data-act="pw-change"><div class="row-main"><span class="row-title">Change password</span></div><span class="row-end">${icon('chev-right')}</span></li>
-        <li class="row tappable" data-act="logout-ask"><div class="row-main"><span class="row-title warn">Log out</span></div></li>
+        <li class="row has-icon"><span class="icon-tile">${icon('user')}</span><div class="row-main"><span class="row-title">${esc(profileName(user))}</span><span class="row-sub">On this iPhone since ${esc(user.createdAt.slice(0, 10))} · no password</span></div></li>
+        ${profiles.filter((p) => p.id !== user.id).map((p) => `<li class="row tappable" data-act="profile-switch" data-id="${esc(p.id)}"><div class="row-main"><span class="row-title">Switch to ${esc(profileName(p))}</span>${p.email ? `<span class="row-sub">${esc(p.email)}</span>` : ''}</div><span class="row-end">${icon('chev-right')}</span></li>`).join('')}
       </ul>` : ''}
 
       <p class="section-label"><span>Exchange rate</span></p>
@@ -106,23 +105,6 @@ registerActions({
     const btn = document.createElement('button');
     btn.dataset.month = id;
     allActions['cats-edit'](btn);
-  },
-  'pw-change': () => openSheet({
-    title: 'Change password',
-    body: `<label class="field"><span class="label">Current password</span><input class="input" type="password" name="cur" autocomplete="current-password" autocapitalize="none" autofocus></label>
-      <label class="field"><span class="label">New password</span><input class="input" type="password" name="next" autocomplete="new-password" autocapitalize="none"></label>`,
-    onSubmit: async (form) => {
-      try {
-        await changePassword(user, form.cur.value, form.next.value);
-      } catch (e) {
-        return fieldError(form, /current/i.test(e.message) ? 'cur' : 'next', e.message);
-      }
-      toast('Password changed');
-    },
-  }),
-  'logout-ask': async () => {
-    const ok = await confirmDialog({ title: 'Log out?', message: `Your data stays saved in your account on this iPhone. Sign in with ${esc(user.email)} and your password to see it again.`, confirmLabel: 'Log out', danger: true });
-    if (ok) actions['log-out']();
   },
   'acc-add': async () => {
     const monthId = localDateParts().monthId;

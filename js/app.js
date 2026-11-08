@@ -11,9 +11,9 @@ import { renderReports } from './views/reports.js';
 import { renderSettings, importBackupFile } from './views/settings.js';
 import './views/budget.js'; // money owed to me + balance sheets (actions)
 import './views/daily.js'; // transaction row actions (open / swipe-delete)
-import { currentUser, logOut } from './auth.js';
+import { startSession, allUsers, useProfile } from './auth.js';
 import { useDatabase } from './db.js';
-import { authGate } from './views/authscreen.js';
+import { profilePicker } from './views/authscreen.js';
 
 const TABS = [
   { key: 'accounts', label: 'Accounts', href: () => routes.accounts() },
@@ -159,8 +159,8 @@ function setupCarousels(reset) {
 setRenderer(render);
 
 registerActions({
-  'log-out': async () => {
-    await logOut();
+  'profile-switch': async (el) => {
+    await useProfile(el.dataset.id);
     closeSheet();
     location.hash = '#/';
     location.reload();
@@ -184,16 +184,18 @@ subscribe(() => render());
 setWriteErrorHandler((err) => toast(`Couldn’t save: ${err.message || 'storage error'}. Your last change was undone.`, { duration: 6000 }));
 
 // ---------- boot ----------
-export let user = null; // the signed-in account (data lives in its own database)
+export let user = null; // the profile in use (its data lives in its own database)
+export let profiles = []; // every profile on this iPhone
 
 (async function boot() {
   try {
-    user = await currentUser();
-    if (!user) { app.innerHTML = ''; user = await authGate(); }
+    user = await startSession(); // no password: opens the last-used profile
+    if (!user) { app.innerHTML = ''; user = await profilePicker(); }
+    profiles = await allUsers();
     useDatabase(user.dataDb);
   } catch (e) {
     console.error(e);
-    toast(`Accounts are unavailable: ${e.message}`);
+    toast(`Profiles are unavailable: ${e.message}`);
   }
   await load();
   app.innerHTML = '';
