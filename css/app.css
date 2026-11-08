@@ -674,7 +674,7 @@ body { background: var(--bg); }
 .round-btn.sm .ic { width: 18px; height: 18px; }
 .round-btn:active { transform: scale(0.94); }
 .glass-pill {
-  display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 26px; flex: none;
+  display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 999px; flex: none;
   background: var(--glass-strong); box-shadow: var(--glass-shine); border: 0.5px solid var(--glass-edge);
   -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6);
 }
@@ -683,7 +683,8 @@ body { background: var(--bg); }
   display: inline-flex; align-items: center; justify-content: center; transition: transform 0.15s var(--ease);
 }
 .pill-btn:active { transform: scale(0.9); background: var(--press); }
-.pill-btn.primary { width: 38px; background: var(--accent); color: #fff; border-radius: 50%; margin-left: 4px; }
+.pill-btn.primary { width: 38px; background: var(--accent); color: #fff; border-radius: 50%; margin-left: 0; flex: none; }
+.pill-btn + .pill-btn.primary { margin-left: 4px; }
 .pill-btn.primary .ic { stroke-width: 2.4; }
 .mw-title { padding: 2px 4px 0; }
 .mw-title h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
@@ -1050,3 +1051,16 @@ details.more > .field + .field { margin-top: 12px; }
 .income-past .mw-amt { font-size: 16px; font-weight: 500; }
 .income-past .acc-name { font-size: 16px; }
 .income-past .acc-list > li + li .acc-row::before, .income-past > li + li .acc-row::before { left: 18px; }
+
+/* ---------- category icons + subcategories ---------- */
+.cat-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cat-title .sq { flex: none; }
+.icon-pick { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.icon-opt { position: relative; aspect-ratio: 1; }
+.icon-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.icon-opt span { width: 100%; height: 100%; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--fill-2); color: var(--text-2); }
+.icon-opt .ic { width: 22px; height: 22px; }
+.icon-opt input:checked + span { background: var(--sq, var(--accent)); color: #fff; box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--sq, var(--accent)); }
+.icon-opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.edit-row .sq { flex: none; width: 32px; height: 32px; border-radius: 9px; }
+.edit-row .sq .ic { width: 18px; height: 18px; }

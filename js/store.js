@@ -1,6 +1,6 @@
 // App state: loaded once from IndexedDB, kept in memory, written through on every change.
 import * as db from './db.js';
-import { normalizeSettings, createMonthRecord, migrateData } from './defaults.js';
+import { normalizeSettings, createMonthRecord, migrateData, rememberCategoryIcons } from './defaults.js';
 import { canEdit, canClose, canReopen, buildClosing, validateTx } from './ledger.js';
 import { makeBackup, validateBackup } from './backup.js';
 
@@ -44,6 +44,7 @@ export async function load() {
     state.settings = data.settings;
     state.receivables = data.receivables;
     state.months = Object.fromEntries(data.months.map((m) => [m.id, m]));
+    for (const m of [...data.months].sort((a, b) => a.id.localeCompare(b.id))) rememberCategoryIcons(m.categories);
     state.transactions = data.transactions;
     state.hasRestorePoint = !!kvMap.restorePoint;
     if (kvMap.lock || kvMap.session) {
@@ -121,6 +122,7 @@ export function updateMonth(id, mutate, { financial = false, silent = false } = 
   const m = clone(state.months[id]);
   mutate(m);
   state.months[id] = m;
+  rememberCategoryIcons(m.categories);
   return write([op.month(m)], { silent });
 }
 

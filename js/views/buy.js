@@ -6,8 +6,8 @@ import { monthSummary, planTotals, sourceMonthId, monthLabel, categoryPlanned, l
 import { dueDate } from '../insights.js';
 import { longDate } from './chrome.js';
 import { formatMoney, parseAmount, centsToInput, CURRENCIES } from '../money.js';
-import { SELFCARE_ID, missingRecurring, missingUnfinished } from '../defaults.js';
-import { icon, categoryIcon } from '../icons.js';
+import { missingRecurring, missingUnfinished, categoryStyle } from '../defaults.js';
+import { icon, CATEGORY_ICON_CHOICES } from '../icons.js';
 import { esc, registerActions, openSheet, closeSheet, fieldError, toast, checkbox, emptyState, pairText, confirmDialog, moneyStack, shownCurrencies } from '../ui.js';
 import { PRIORITY, doneWord, findCategory, removePlanItem } from './plan.js';
 
@@ -33,7 +33,7 @@ export function renderBuy(id, path = []) {
   const cat = catId && findCategory(m, catId);
   if (!cat) return renderRoot(id, m);
   const sub = subId && cat.lists?.find((l) => l.id === subId);
-  if (cat.id === SELFCARE_ID && cat.lists?.length && !sub) return renderSelfcare(id, m, cat);
+  if (cat.lists?.length && !sub) return renderSubcategories(id, m, cat);
   return renderItems(id, m, cat, sub);
 }
 
@@ -73,7 +73,7 @@ export function categoryList(id) {
         const subline = ct.count ? `${ct.count} item${ct.count > 1 ? 's' : ''}${ct.open && ct.open < ct.count ? ` · ${ct.open} left` : ct.open ? '' : ' · all done'}`
           : c.lists?.length ? `${c.lists.length} subcategories` : 'Nothing planned';
         return `<li><a class="row has-icon" href="${routes.budgets(id, c.id)}">
-          <span class="icon-tile">${categoryIcon(c.id)}</span>
+          <span class="icon-tile">${icon(categoryStyle(c.id).icon)}</span>
           <div class="row-main"><span class="row-title">${esc(c.name)}</span><span class="row-sub">${subline}</span></div>
           <span class="row-end">${amountText(ct.planned)}${icon('chev-right')}</span>
         </a></li>`;
@@ -97,14 +97,14 @@ export function carryButtons(id, { income = false } = {}) {
     </div>`;
 }
 
-// ---------- Self-care: subcategories ----------
-function renderSelfcare(id, m, cat) {
+// ---------- a category with subcategories (folders) ----------
+function renderSubcategories(id, m, cat) {
   const items = expenseItems(m).filter((p) => p.categoryId === cat.id);
   const loose = items.filter((p) => !p.listId || !cat.lists.some((l) => l.id === p.listId));
   return `
     <a class="back-link" href="${routes.budgets(id)}">${icon('chev-left')} Planned</a>
-    <div class="title-row"><h1 class="large-title">${esc(cat.name)}</h1>
-      ${m.closing ? '' : `<button class="glass-btn sm" data-act="cat-edit" data-month="${id}" data-cat="${esc(cat.id)}" aria-label="Rename">${icon('edit')}</button>`}</div>
+    <div class="title-row"><h1 class="large-title cat-title">${catSquare(m, cat)}${esc(cat.name)}</h1>
+      ${m.closing ? '' : `<button class="glass-btn sm" data-act="cat-edit" data-month="${id}" data-cat="${esc(cat.id)}" aria-label="Edit name and icon">${icon('edit')}</button>`}</div>
     ${summaryCard(id, cat, items)}
     <ul class="list card flush">
       ${cat.lists.map((l) => {
@@ -116,7 +116,7 @@ function renderSelfcare(id, m, cat) {
       }).join('')}
     </ul>
     ${loose.length ? `<p class="section-label"><span>Other items</span></p>${itemList(id, loose)}` : ''}
-    ${m.closing ? '' : `<button class="text-btn" data-act="sub-add" data-month="${id}" data-cat="${esc(cat.id)}">${icon('plus')} New subcategory</button>`}
+    ${m.closing ? '' : `<button class="text-btn" data-act="sub-add" data-month="${id}" data-cat="${esc(cat.id)}">${icon('folder-plus')} New subcategory</button>`}
   `;
 }
 
@@ -126,12 +126,27 @@ function renderItems(id, m, cat, sub) {
   const closed = !!m.closing;
   return `
     <a class="back-link" href="${sub ? routes.budgets(id, cat.id) : routes.budgets(id)}">${icon('chev-left')} ${sub ? esc(cat.name) : 'Planned'}</a>
-    <div class="title-row"><h1 class="large-title">${esc(sub ? sub.name : cat.name)}</h1>
+    <div class="title-row"><h1 class="large-title cat-title">${sub ? '' : catSquare(m, cat)}${esc(sub ? sub.name : cat.name)}</h1>
       ${closed ? '' : `<button class="glass-btn sm" data-act="${sub ? 'sub-edit' : 'cat-edit'}" data-month="${id}" data-cat="${esc(cat.id)}" ${sub ? `data-list="${esc(sub.id)}"` : ''} aria-label="Rename">${icon('edit')}</button>`}</div>
     ${sub ? '' : summaryCard(id, cat, items)}
     ${items.length ? itemList(id, items) : `<div class="card">${emptyState('Nothing here yet', closed ? '' : 'Tap <b>+</b> to add something you plan to buy or pay.')}</div>`}
-    ${closed || !items.length ? '' : `<button class="text-btn" data-act="plan-add" data-month="${id}" data-cat="${esc(cat.id)}" ${sub ? `data-list="${esc(sub.id)}"` : ''}>${icon('plus')} Add item</button>`}
+    ${closed ? '' : `<div class="title-row">
+      ${items.length ? `<button class="text-btn" data-act="plan-add" data-month="${id}" data-cat="${esc(cat.id)}" ${sub ? `data-list="${esc(sub.id)}"` : ''}>${icon('plus')} Add item</button>` : '<span></span>'}
+      ${sub ? '' : `<button class="text-btn" data-act="sub-add" data-month="${id}" data-cat="${esc(cat.id)}">${icon('folder-plus')} New subcategory</button>`}
+    </div>`}
   `;
+}
+
+/** The category's coloured square with its icon (yours if you picked one). */
+function catSquare(m, cat) {
+  const { color, icon: ic } = categoryStyle(cat.id, m.categories.indexOf(cat));
+  return `<span class="sq" style="--sq:${color}">${icon(ic)}</span>`;
+}
+
+/** A grid of icons to pick from, as radio buttons named `name`. */
+function iconPicker(name, selected, color) {
+  return `<div class="icon-pick" style="--sq:${color}" role="radiogroup" aria-label="Icon">${CATEGORY_ICON_CHOICES.map((ic) => `
+    <label class="icon-opt"><input type="radio" name="${name}" value="${ic}" ${ic === selected ? 'checked' : ''}><span>${icon(ic)}</span></label>`).join('')}</div>`;
 }
 
 function summaryCard(id, cat, items) {
@@ -262,25 +277,36 @@ registerActions({
   },
   'cat-edit': (el) => {
     const { month: id, cat: catId } = el.dataset;
-    const cat = findCategory(state.months[id], catId);
-    const used = state.months[id].plan.some((p) => p.categoryId === catId);
-    nameSheet({
-      title: 'Category', value: cat.name, placeholder: 'Category name',
-      onSave: (name) => updateMonth(id, (mm) => { findCategory(mm, catId).name = name; }, { financial: true }),
-      deleteLabel: 'Delete category',
-      onDelete: async () => {
-        if (used) return toast('Remove its items first');
-        const ok = await confirmDialog({ title: `Delete “${esc(cat.name)}”?`, message: `Only in ${monthLabel(id)} and months created after it.`, confirmLabel: 'Delete', danger: true });
-        if (!ok) return;
-        await updateMonth(id, (mm) => { mm.categories = mm.categories.filter((c) => c.id !== catId); }, { financial: true });
-        location.hash = routes.budgets(id);
+    const m = state.months[id];
+    const cat = findCategory(m, catId);
+    const used = m.plan.some((p) => p.categoryId === catId);
+    const style = categoryStyle(cat.id, m.categories.indexOf(cat));
+    openSheet({
+      title: 'Category',
+      body: `<label class="field"><span class="label">Name</span><input class="input" name="label" maxlength="40" value="${esc(cat.name)}" placeholder="Category name"></label>
+        <div class="field"><span class="label">Icon</span>${iconPicker('icon', style.icon, style.color)}</div>
+        <button type="button" class="btn btn-danger-ghost" data-act="cat-delete">Delete category</button>`,
+      actions: {
+        'cat-delete': async () => {
+          if (used) return toast('Remove its items first');
+          const ok = await confirmDialog({ title: `Delete “${esc(cat.name)}”?`, message: `Only in ${monthLabel(id)} and months created after it.`, confirmLabel: 'Delete', danger: true });
+          if (!ok) return;
+          await updateMonth(id, (mm) => { mm.categories = mm.categories.filter((c) => c.id !== catId); }, { financial: true });
+          location.hash = routes.budgets(id);
+        },
+      },
+      onSubmit: async (form) => {
+        const name = form.label.value.trim();
+        if (!name) return fieldError(form, 'label', 'Give it a name');
+        const picked = form.icon.value;
+        await updateMonth(id, (mm) => { const c = findCategory(mm, catId); c.name = name; c.icon = picked; }, { financial: true });
       },
     });
   },
   'sub-add': (el) => {
     const { month: id, cat: catId } = el.dataset;
     nameSheet({
-      title: 'New subcategory', value: '', placeholder: 'e.g. Nails',
+      title: 'New subcategory', value: '', placeholder: 'e.g. Groceries, Nails, Rent',
       onSave: (name) => updateMonth(id, (mm) => { const c = findCategory(mm, catId); (c.lists ||= []).push({ id: uid(), name }); }, { financial: true }),
     });
   },
@@ -309,10 +335,13 @@ registerActions({
       body: `<p class="hint">Changes apply to ${monthLabel(id)} and months created after it.</p>
         <div>${m.categories.map((c) => `
           <div class="edit-row" data-cat-row="${esc(c.id)}">
+            ${catSquare(m, c)}
             <input class="input" name="cat_${esc(c.id)}" value="${esc(c.name)}" maxlength="40" aria-label="Category name">
             <button type="button" class="plain-btn" data-act="cat-remove" data-cat="${esc(c.id)}" aria-label="Remove ${esc(c.name)}">${icon('trash')}</button>
           </div>`).join('')}</div>
-        <input class="input" name="newCat" maxlength="40" placeholder="New category">`,
+        <label class="field"><span class="label">New category</span><input class="input" name="newCat" maxlength="40" placeholder="e.g. Car, Kids, Pets"></label>
+        <div class="field"><span class="label">Icon for the new category</span>${iconPicker('newIcon', 'cat-custom', '#007aff')}</div>
+        <p class="hint">To change the icon of an existing category, open it and tap ${icon('edit', 'ic-xs')}.</p>`,
       actions: {
         'cat-remove': (b) => {
           if (used.has(b.dataset.cat)) return toast('Remove its items first');
@@ -324,7 +353,7 @@ registerActions({
         const cats = m.categories.filter((c) => !removed.has(c.id))
           .map((c) => ({ ...c, name: form[`cat_${c.id}`].value.trim() || c.name }));
         const nc = form.newCat.value.trim();
-        if (nc) cats.push({ id: uid(), name: nc });
+        if (nc) cats.push({ id: uid(), name: nc, icon: form.newIcon.value || 'cat-custom' });
         await updateMonth(id, (mm) => { mm.categories = cats; }, { financial: true });
         toast('Categories saved');
       },

@@ -79,7 +79,39 @@ const I = {
   'cat-fun': '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14a4 4 0 0 0 7 0M9.5 9.5h.01M14.5 9.5h.01"/>',
   'cat-other': '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/>',
   'cat-custom': '<path d="M4 4.5h7l8.5 8.5-6.5 6.5L4.5 11z"/><path d="M8.5 8.5h.01"/>',
+  // icons you can choose for a category
+  'ci-food': '<path d="M6 3.5v6a2 2 0 0 0 4 0v-6M8 3.5v17M16.5 20.5v-17c-2 .8-3.2 3.4-3.2 6.5v3.5h3.2"/>',
+  'ci-cart': '<path d="M3.5 4.5h2.2l2 10.5h10.3l2-7.5H6.6"/><circle cx="9" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/>',
+  'ci-coffee': '<path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5zM16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3.5v2.5M11 3.5v2.5M14 3.5v2.5"/>',
+  'ci-car': '<path d="M4 15.5V12l2-5h12l2 5v3.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM4 12h16M6 16.5V19M18 16.5V19"/><path d="M7.5 14.2h.01M16.5 14.2h.01" stroke-width="2.4"/>',
+  'ci-bus': '<rect x="5" y="3.5" width="14" height="14" rx="2.5"/><path d="M5 11h14M8 17.5V20M16 17.5V20"/><path d="M8.5 14.3h.01M15.5 14.3h.01" stroke-width="2.4"/>',
+  'ci-plane': '<path d="M21 4.5L3.5 11l6.5 2.5L12.5 20z"/><path d="M10 13.5l4-4"/>',
+  'ci-health': '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.5 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/><path d="M8 12h2l1-2 2 4 1-2h2"/>',
+  'ci-pill': '<rect x="3.8" y="8.8" width="16.4" height="6.4" rx="3.2" transform="rotate(-45 12 12)"/><path d="M9.7 9.7l4.6 4.6"/>',
+  'ci-bag': '<path d="M5.5 8.5h13l-.9 11a1.5 1.5 0 0 1-1.5 1.4H7.9a1.5 1.5 0 0 1-1.5-1.4z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/>',
+  'ci-shirt': '<path d="M8.5 4L4 6.5l1.8 4 2.2-1V20h8V9.5l2.2 1 1.8-4L15.5 4a3.5 3.5 0 0 1-7 0z"/>',
+  'ci-gift': '<rect x="4" y="8.5" width="16" height="4" rx="1"/><path d="M5.5 12.5V20h13v-7.5M12 8.5V20M12 8.5C10.5 5 7 5 7 7s3 1.5 5 1.5zM12 8.5c1.5-3.5 5-3.5 5-1.5s-3 1.5-5 1.5z"/>',
+  'ci-book': '<path d="M4.5 5.5c2.5-1 5-1 7.5.5v13c-2.5-1.5-5-1.5-7.5-.5zM19.5 5.5c-2.5-1-5-1-7.5.5v13c2.5-1.5 5-1.5 7.5-.5z"/>',
+  'ci-paw': '<circle cx="6.8" cy="10.2" r="1.6"/><circle cx="10" cy="6.5" r="1.6"/><circle cx="14" cy="6.5" r="1.6"/><circle cx="17.2" cy="10.2" r="1.6"/><path d="M12 11.5c-2.5 0-5 3.5-5 5.5 0 1.5 1.5 2.5 3 2l2-.5 2 .5c1.5.5 3-.5 3-2 0-2-2.5-5.5-5-5.5z"/>',
+  'ci-sport': '<path d="M6.5 7.5v9M17.5 7.5v9M4 10v4M20 10v4M6.5 12h11"/>',
+  'ci-phone': '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/>',
+  'ci-wifi': '<path d="M4 9.5a12 12 0 0 1 16 0M7 13a7.5 7.5 0 0 1 10 0M10 16.3a3 3 0 0 1 4 0"/><path d="M12 19.5h.01" stroke-width="2.6"/>',
+  'ci-bolt': '<path d="M13 3L5.5 13.5H12L11 21l7.5-10.5H12z"/>',
+  'ci-film': '<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M7.5 5v14M16.5 5v14M3.5 9.5h4M3.5 14.5h4M16.5 9.5h4M16.5 14.5h4"/>',
+  'ci-music': '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
+  'ci-kids': '<path d="M12 3.5a5 5 0 0 1 5 5c0 3.5-3 6.5-5 6.5s-5-3-5-6.5a5 5 0 0 1 5-5zM11 16.5h2L12 15zM12 16.5c0 2-2 2-2 4"/>',
+  'ci-work': '<rect x="3.5" y="7.5" width="17" height="12" rx="2"/><path d="M9 7.5v-2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3.5 12.5h17"/>',
+  'ci-tools': '<path d="M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17l3 3 5.5-5.5a4 4 0 0 0 5.2-5.2l-2.5 2.5-2.5-.5-.5-2.5z"/>',
+  'ci-beauty': '<path d="M9.5 21v-7h5v7zM10.5 14V8.5l3-3V14"/>',
 };
+
+/** Icons offered when you choose one for a category (the first is "automatic"). */
+export const CATEGORY_ICON_CHOICES = [
+  'cat-necessary', 'ci-food', 'ci-cart', 'ci-coffee', 'ci-car', 'ci-bus', 'ci-plane', 'ci-health', 'ci-pill',
+  'ci-bag', 'ci-shirt', 'ci-beauty', 'cat-selfcare', 'ci-gift', 'ci-book', 'ci-kids', 'ci-paw', 'ci-sport',
+  'ci-phone', 'ci-wifi', 'ci-bolt', 'cat-subscriptions', 'ci-film', 'ci-music', 'cat-fun', 'ci-work', 'ci-tools',
+  'kind-savings', 'cat-custom', 'cat-other',
+];
 
 export function icon(name, cls = '') {
   return `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${I[name] || ''}</svg>`;

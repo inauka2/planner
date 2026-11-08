@@ -3,7 +3,7 @@
 import { state, updateMonth, uid, deleteTx, linkTxToPlan } from '../store.js';
 import { canEdit, monthLabel, accountById, findTxMatch } from '../ledger.js';
 import { parseAmount, formatMoney, centsToInput } from '../money.js';
-import { BILL_CATEGORIES, SELFCARE_ID } from '../defaults.js';
+import { BILL_CATEGORIES } from '../defaults.js';
 import { icon } from '../icons.js';
 import {
   esc, registerActions, openSheet, fieldError, toast, currencySeg, segmented, switchRow,
@@ -27,7 +27,7 @@ function guard(id) {
 }
 
 function subOptions(cat, selected) {
-  return (cat?.lists || []).map((l) => `<option value="${esc(l.id)}" ${l.id === selected ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
+  return `<option value="">No subcategory</option>${(cat?.lists || []).map((l) => `<option value="${esc(l.id)}" ${l.id === selected ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}`;
 }
 
 function itemForm(m, p, { kind, categoryId, listId, pickCategory }) {
@@ -50,7 +50,7 @@ function itemForm(m, p, { kind, categoryId, listId, pickCategory }) {
     ${kind === 'expense' && pickCategory ? `
       <label class="field"><span class="label">Category</span>
         <select class="select" name="category">${m.categories.map((c) => `<option value="${esc(c.id)}" ${c.id === catId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
-    ${kind === 'expense' && (pickCategory || (catId === SELFCARE_ID && !listId && !p)) ? `
+    ${kind === 'expense' && (pickCategory || (cat?.lists?.length && !listId && !p)) ? `
       <label class="field" data-sub ${cat?.lists?.length ? '' : 'hidden'}><span class="label">Subcategory</span>
         <select class="select" name="list">${subOptions(cat, p?.listId ?? listId)}</select></label>` : ''}
     ${kind === 'expense' ? `<div class="field" data-prio ${bill ? 'hidden' : ''}><span class="label">Priority <span class="optional">optional</span></span>
@@ -83,7 +83,8 @@ function readItem(form, kind, fixed) {
   if (kind === 'expense') {
     out.categoryId = form.category ? form.category.value : fixed.categoryId;
     out.listId = form.list && !form.list.closest('[hidden]') ? form.list.value || null : fixed.listId ?? null;
-    if (out.categoryId !== SELFCARE_ID) out.listId = null;
+    // keep the subcategory only if the chosen category has it
+    if (out.listId && !(fixed.month && findCategory(fixed.month, out.categoryId))?.lists?.some((l) => l.id === out.listId)) out.listId = null;
     out.priority = form.priority && !BILL_CATEGORIES.includes(out.categoryId) ? form.priority.value || null : null;
   } else {
     out.categoryId = null;
@@ -120,7 +121,7 @@ export function addPlanItem(id, { kind = 'expense', categoryId = null, listId = 
     onOpen: (form) => wireCategorySelect(form, m),
     actions: { 'plan-suggest': (b) => { const f = b.closest('form'); f.description.value = b.dataset.text; f.amount.focus(); } },
     onSubmit: async (form) => {
-      const v = readItem(form, kind, { categoryId, listId });
+      const v = readItem(form, kind, { categoryId, listId, month: m });
       if (!v) return false;
       await updateMonth(id, (mm) => { mm.plan.push({ id: uid(), kind, ...v, paid: false, txId: null }); }, { financial: true });
       toast('Added');
@@ -150,7 +151,7 @@ export function openPlanItem(id, itemId) {
       },
     },
     onSubmit: async (form) => {
-      const v = readItem(form, p.kind, p);
+      const v = readItem(form, p.kind, { ...p, month: state.months[id] });
       if (!v) return false;
       await updateMonth(id, (mm) => { Object.assign(mm.plan.find((x) => x.id === p.id), v); }, { financial: true });
       toast('Saved');

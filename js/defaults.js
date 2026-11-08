@@ -38,7 +38,16 @@ const CATEGORY_COLORS = ['#007aff', '#5ac8fa', '#ffcc00', '#a2845e', '#30b0c7', 
 export function categoryStyle(catId, index = 0) {
   if (!catId) return { color: '#8e8e93', icon: 'cat-other' };
   const [color, ic] = CATEGORY_STYLE[catId] || [CATEGORY_COLORS[Math.abs(hashCode(catId) + index) % CATEGORY_COLORS.length], 'cat-custom'];
-  return { color, icon: ic };
+  return { color, icon: chosenIcons.get(catId) || ic };
+}
+
+/** Icons people picked for their categories (category id → icon name), kept in sync by the store. */
+const chosenIcons = new Map();
+export function rememberCategoryIcons(categories = []) {
+  for (const c of categories) {
+    if (c.icon) chosenIcons.set(c.id, c.icon);
+    else chosenIcons.delete(c.id);
+  }
 }
 function hashCode(s) {
   let h = 0;
@@ -124,6 +133,7 @@ export function normalizeSettings(s) {
 const copyCategories = (cats) =>
   cats.map((c) => ({
     id: c.id, name: c.name,
+    ...(c.icon ? { icon: c.icon } : {}),
     ...(c.budget ? { budget: { ...c.budget } } : {}),
     ...(c.lists ? { lists: c.lists.map((l) => ({ id: l.id, name: l.name })) } : {}),
   }));
