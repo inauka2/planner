@@ -1,4 +1,4 @@
-// App bootstrap: hash router, the four-tab shell, motion, global event delegation, service worker.
+// App bootstrap: hash router, the five-tab shell, motion, global event delegation, service worker.
 import { state, load, subscribe, ensureMonth, setWriteErrorHandler, saveSettings } from './store.js';
 import { isMonthId, localDateParts } from './ledger.js';
 import { icon } from './icons.js';
@@ -19,6 +19,7 @@ const TABS = [
   { key: 'accounts', label: 'Accounts', ic: 'tab-accounts', href: () => routes.accounts() },
   { key: 'daily', label: 'Daily', ic: 'tab-daily', href: () => routes.daily(thisMonth()) },
   { key: 'plan', label: 'Planned', ic: 'tab-scheduled', href: () => routes.bills(thisMonth()) },
+  { key: 'todo', label: 'To Do', ic: 'tab-todo', href: () => routes.todo(thisMonth()) },
   { key: 'summary', label: 'Summary', ic: 'tab-summary', href: () => routes.summary(thisMonth()) },
 ];
 
@@ -42,7 +43,7 @@ function legacy(parts) {
   return routes.accounts();
 }
 
-/** `tab` picks the screen; `nav` the highlighted tab (none for Settings, To Do and Reports). */
+/** `tab` picks the screen; `nav` the highlighted tab (none for Settings). */
 function parseRoute() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   const old = legacy(parts);
@@ -56,7 +57,7 @@ function parseRoute() {
       return { tab: 'plan', nav: 'plan', month: month(parts[1]), view, path, depth: path.length };
     }
     case 'summary': return { tab: 'summary', nav: 'summary', month: month(parts[1]), depth: 0 };
-    case 'todo': return { tab: 'todo', month: month(parts[1]), path: parts.slice(2, 3), depth: parts[2] ? 2 : 1 };
+    case 'todo': return { tab: 'todo', nav: 'todo', month: month(parts[1]), path: parts.slice(2, 3), depth: parts[2] ? 1 : 0 };
     case 'reports': return { tab: 'reports', nav: 'summary', key: parts[1] || null, month: isMonthId(parts[2] || '') ? parts[2] : null, depth: parts[1] ? 2 : 1 };
     case 'settings': return { tab: 'settings', depth: 1 };
     default:

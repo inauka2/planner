@@ -14,7 +14,7 @@ import { user, profiles, backHref } from '../app.js';
 import { routes } from '../routes.js';
 import { profileName } from '../auth.js';
 
-export const APP_VERSION = '2.1.0';
+export const APP_VERSION = '2.1.1';
 let persisted = null;
 
 export function renderSettings() {
@@ -49,7 +49,6 @@ export function renderSettings() {
 
       <p class="section-label"><span>More</span></p>
       <ul class="list card flush">
-        <li><a class="row" href="${routes.todo(localDateParts().monthId)}"><div class="row-main"><span class="row-title">To Do lists</span><span class="row-sub">Tasks and reminders for the month</span></div><span class="row-end">${icon('chev-right')}</span></a></li>
         <li><a class="row" href="${routes.reports()}"><div class="row-main"><span class="row-title">Reports</span><span class="row-sub">Charts for spending, income, net worth and more</span></div><span class="row-end">${icon('chev-right')}</span></a></li>
       </ul>
 

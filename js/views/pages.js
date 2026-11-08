@@ -1,4 +1,4 @@
-// The Daily, Planned and Summary tabs, plus the To Do screen.
+// The Daily, Planned, To Do and Summary tabs.
 // Each page: settings button and one + button at the top, a large title, the month, then content.
 import { state, ensureMonth } from '../store.js';
 import { monthSummary, monthTxs, localDateParts } from '../ledger.js';
@@ -99,11 +99,11 @@ export function renderSummaryPage(id) {
     </main>`;
 }
 
-// ---------- To Do (opened from Settings) ----------
-export function renderTodoPage(id, path = [], back = routes.settings()) {
+// ---------- To Do: the month's activities and important things to do ----------
+export function renderTodoPage(id, path = []) {
   const list = path[0];
   return `
-    ${topBar({ back: list ? routes.todo(id) : back, buttons: [
+    ${topBar({ back: list ? routes.todo(id) : null, buttons: [
       pillBtn({ act: 'sched-add-task', ic: 'plus', label: 'New task', primary: true, attrs: `data-month="${id}" ${list ? `data-list="${esc(list)}"` : ''}` }),
     ] })}
     <main class="content ${list ? 'drill' : ''}">

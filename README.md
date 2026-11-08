@@ -3,7 +3,7 @@
 An installable, offline-first web app (PWA) for iPhone, light and dark. No backend.
 **All data stays on your device** (IndexedDB). Nothing is sent to any server.
 
-Four simple tabs. Every page has the ⚙︎ Settings button at the top left and one blue **+** at the top right.
+Five simple tabs. Every page has the ⚙︎ Settings button at the top left and one blue **+** at the top right.
 
 - **Accounts & Budgets:** all your money (with a Lek / Euro / Dollar breakdown), your bank accounts and cash, money people owe you, and this month's budget: how much is left to spend, then one bar per category (spent / budget).
   - Tap an account to see its transactions with the running balance, and upcoming bills paid from it. The ••• menu edits the account, corrects its balance, transfers money or imports a bank file.
@@ -11,8 +11,9 @@ Four simple tabs. Every page has the ⚙︎ Settings button at the top left and 
 - **Planned:** two parts.
   - **Bills:** monthly bills, subscriptions and expected salary, with the day they are due. Tick one when you pay it and the payment is recorded.
   - **To Buy:** what you plan to buy, by category. Open a category to set its budget, add items and use subcategories.
+- **To Do:** the month's activities and important things to do, in lists (Activities, Projects, Health…). Type tasks one after another, give them a deadline or a cost (a cost also appears in To Buy), tick them off, and bring unfinished ones into the next month.
 - **Summary:** the month at a glance (started with, ends with, income, spent), spending by category and by year, and **closing the month**. *More reports* has charts for net worth, cash flow, payees and more.
-- **Settings:** accounts, appearance (auto / light / dark), privacy mode (hides every amount — also the eye at the top), **To Do lists**, reports, import, categories, exchange rates, backup and restore.
+- **Settings:** accounts, appearance (auto / light / dark), privacy mode (hides every amount — also the eye at the top), reports, import, categories, exchange rates, backup and restore.
 - **Transactions** (blue +): expense, income or transfer, any date, category and subcategory, tags and notes. Paying in USD from a Lek or Euro account records both the price and what the bank took.
 - **Import** CSV, OFX, QFX or QIF statements from your bank into any account; rows already there are skipped.
 - **Currencies:** ALL, EUR and USD are kept separate (one currency per account). The exchange rates (Settings) are only used for the "≈ ALL" figures, budgets and reports, and are saved with each closed month.
@@ -31,7 +32,7 @@ Plain HTML, CSS and JavaScript (ES modules). No framework, no build step, no run
 | `js/defaults.js` | Default accounts, categories, lists and the new-month template |
 | `js/db.js`, `js/store.js` | IndexedDB storage and app state |
 | `js/backup.js` | Backup, restore and CSV export |
-| `js/views/*` | Screens: `accountsTab.js` (Accounts & Budgets), `pages.js` (Daily, Planned, Summary, To Do), `scheduled.js` (bills), `buy.js` (To Buy), `summary.js`, `todo.js`, `reports.js`, `settings.js`; `chrome.js` holds the shared top bar and rows; `plan.js` the logic for planned items |
+| `js/views/*` | Screens: `accountsTab.js` (Accounts & Budgets), `pages.js` (Daily, Planned, To Do, Summary), `scheduled.js` (bills), `buy.js` (To Buy), `summary.js`, `todo.js`, `reports.js`, `settings.js`; `chrome.js` holds the shared top bar and rows; `plan.js` the logic for planned items |
 | `sw.js` | Service worker (offline cache, updates) |
 | `tests/` | Unit tests for the money logic (`npm test`) |
 

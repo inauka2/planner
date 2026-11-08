@@ -692,7 +692,7 @@ body { background: var(--bg); }
 .mw-tabbar {
   position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); bottom: var(--dock-gap);
   width: min(calc(100% - 24px), 520px); height: 64px; padding: 4px; border-radius: 32px;
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px;
   background: var(--glass); border: 0.5px solid var(--glass-edge); box-shadow: var(--glass-shine);
   -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8);
 }
