@@ -14,7 +14,7 @@ import { user, profiles, backHref } from '../app.js';
 import { routes } from '../routes.js';
 import { profileName } from '../auth.js';
 
-export const APP_VERSION = '2.1.1';
+export const APP_VERSION = '2.1.2';
 let persisted = null;
 
 export function renderSettings() {

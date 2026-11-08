@@ -8,9 +8,7 @@ Five simple tabs. Every page has the ⚙︎ Settings button at the top left and 
 - **Accounts & Budgets:** all your money (with a Lek / Euro / Dollar breakdown), your bank accounts and cash, money people owe you, and this month's budget: how much is left to spend, then one bar per category (spent / budget).
   - Tap an account to see its transactions with the running balance, and upcoming bills paid from it. The ••• menu edits the account, corrects its balance, transfers money or imports a bank file.
 - **Daily:** what you spent today and this month, and your income. Big **Expense**, **Income** and **Transfer** buttons, then every transaction grouped by day.
-- **Planned:** two parts.
-  - **Bills:** monthly bills, subscriptions and expected salary, with the day they are due. Tick one when you pay it and the payment is recorded.
-  - **To Buy:** what you plan to buy, by category. Open a category to set its budget, add items and use subcategories.
+- **Planned:** everything you plan to buy or pay this month, bills included, on one page. At the top: **Spent** and **Still to buy**. Then *Due soon* (bills due in the next 7 days or overdue), your **categories** (open one to set its budget, add items and use subcategories) and *Expected income*. Tick an item when you pay it and the payment is recorded.
 - **To Do:** the month's activities and important things to do, in lists (Activities, Projects, Health…). Type tasks one after another, give them a deadline or a cost (a cost also appears in To Buy), tick them off, and bring unfinished ones into the next month.
 - **Summary:** the month at a glance (started with, ends with, income, spent), spending by category and by year, and **closing the month**. *More reports* has charts for net worth, cash flow, payees and more.
 - **Settings:** accounts, appearance (auto / light / dark), privacy mode (hides every amount — also the eye at the top), reports, import, categories, exchange rates, backup and restore.
@@ -32,7 +30,7 @@ Plain HTML, CSS and JavaScript (ES modules). No framework, no build step, no run
 | `js/defaults.js` | Default accounts, categories, lists and the new-month template |
 | `js/db.js`, `js/store.js` | IndexedDB storage and app state |
 | `js/backup.js` | Backup, restore and CSV export |
-| `js/views/*` | Screens: `accountsTab.js` (Accounts & Budgets), `pages.js` (Daily, Planned, To Do, Summary), `scheduled.js` (bills), `buy.js` (To Buy), `summary.js`, `todo.js`, `reports.js`, `settings.js`; `chrome.js` holds the shared top bar and rows; `plan.js` the logic for planned items |
+| `js/views/*` | Screens: `accountsTab.js` (Accounts & Budgets), `pages.js` (Daily, Planned, To Do, Summary), `buy.js` (Planned categories and items), `scheduled.js` (bill and income rows), `summary.js`, `todo.js`, `reports.js`, `settings.js`; `chrome.js` holds the shared top bar and rows; `plan.js` the logic for planned items |
 | `sw.js` | Service worker (offline cache, updates) |
 | `tests/` | Unit tests for the money logic (`npm test`) |
 
@@ -120,7 +118,7 @@ Don't use "Remove from Home Screen" or Settings → Safari → Clear History and
   - A To Do task can have a **cost** (e.g. "Trip to Kosovo — €150"): it is stored once, as a planned item in To Buy, and shown on both pages.
   - Adding an expense in Daily that matches something unpaid in To Buy asks *"Is this …?"* — yes links them (marked paid, counted once).
   - Ticking a To Buy item that's already in Daily offers *"Link to … in Daily"* instead of recording it again.
-- **Category budgets:** in To Buy, open a category and *Set budget* in Lek, Euro and/or Dollar; otherwise Planned is the total of its items.
+- **Category budgets:** in Planned, open a category and *Set budget* in Lek, Euro and/or Dollar; otherwise Planned is the total of its items.
 - **To Buy items** are a plan, not spending. Ticking one asks whether to *record the expense* or *just mark it* (if you already added it in Daily), so nothing is counted twice.
 - New months automatically get the same categories and lists, plus your **recurring** items (bills, subscriptions, salary), marked as *not paid*. *To Buy* and *To Do* can bring over unfinished items from the previous month.
 - Data saved by version 1.0 is converted automatically on first launch: shopping lists become Self-care subcategories, and the unused default "Savings" account is removed. You can add a savings account in Settings at any time.

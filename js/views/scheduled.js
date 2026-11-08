@@ -1,48 +1,16 @@
-// Planned → Bills: monthly bills, subscriptions and expected income, sorted by when they are due.
-// Tick one to record the payment from its account.
+// Rows for planned bills and expected income (due date, tick to pay or receive), used on the
+// Planned page for "Due soon" and "Expected income".
 import { state } from '../store.js';
-import { localDateParts, getRates } from '../ledger.js';
 import { formatMoney } from '../money.js';
-import { icon } from '../icons.js';
 import { categoryStyle } from '../defaults.js';
-import { esc, registerActions, checkbox, emptyState, chooseDialog } from '../ui.js';
-import { categoryName, scheduledItems, toDisplay } from '../insights.js';
+import { esc, registerActions, checkbox } from '../ui.js';
+import { categoryName } from '../insights.js';
 import { square, longDate } from './chrome.js';
 import { addPlanItem, doneWord } from './plan.js';
-import { carryButtons } from './buy.js';
 import { addTaskSheet } from './todo.js';
 
-// ---------- list ----------
-export function renderBills(id) {
-  const today = localDateParts().date;
-  const items = scheduledItems(state, id, today);
-  const rates = getRates(state, id);
-  const sumOf = (list, kind) => list.filter((s) => (s.item.kind === 'income') === (kind === 'income') && s.item.amount)
-    .reduce((t, s) => t + toDisplay(s.item.amount, s.item.currency, 'ALL', rates), 0);
-  const unpaid = items.filter((s) => s.status !== 'paid');
-  const sections = [
-    ['Overdue', items.filter((s) => s.status === 'overdue'), 'overdue'],
-    ['Today', items.filter((s) => s.status === 'today'), ''],
-    ['Upcoming', items.filter((s) => s.status === 'upcoming'), ''],
-    ['No due date', items.filter((s) => s.status === 'nodate'), ''],
-    ['Paid & received', items.filter((s) => s.status === 'paid'), 'done'],
-  ].filter(([, list]) => list.length);
-
-  return `
-    <section class="remain-card three">
-      <div><p class="cap accent-cap">To pay</p><p class="remain-big"><span class="mw-amt neg">${formatMoney(sumOf(unpaid, 'expense'), 'ALL')}</span></p></div>
-      <div><p class="cap accent-cap">To receive</p><p class="remain-big"><span class="mw-amt pos">${formatMoney(sumOf(unpaid, 'income'), 'ALL')}</span></p></div>
-    </section>
-    ${carryButtons(id, { income: true })}
-    ${sections.length ? sections.map(([title, list, cls]) => `
-      <section class="reg-section ${cls}">
-        <h2 class="reg-head">${title}</h2>
-        <ul class="reg-list">${list.map((s) => schedRow(id, s)).join('')}</ul>
-      </section>`).join('') : `<section class="group-card">${emptyState('No bills yet', 'Add your monthly bills, subscriptions and salary, with the day they are due.', state.months[id].closing ? '' : `<button class="btn btn-primary" data-act="sched-add" data-month="${id}">Add a bill</button>`)}</section>`}
-    <p class="hint pad">Tick a bill when you pay it — the payment is recorded from its account.</p>`;
-}
-
-function schedRow(id, s) {
+/** One planned bill or income with its due date; tick it to record the payment. */
+export function schedRow(id, s) {
   const p = s.item;
   const m = state.months[id];
   const closed = !!m.closing;
@@ -62,17 +30,6 @@ function schedRow(id, s) {
 }
 
 registerActions({
-  'sched-add': async (el) => {
-    const id = el.dataset.month;
-    const kind = await chooseDialog({
-      title: 'Add to Bills',
-      options: [
-        { key: 'bill', label: 'Bill to pay', hint: 'Rent, phone, Netflix… can repeat every month', primary: true },
-        { key: 'income', label: 'Expected income', hint: 'Salary or other money you expect' },
-      ],
-    });
-    if (kind === 'bill') addPlanItem(id, { kind: 'expense' });
-    else if (kind === 'income') addPlanItem(id, { kind: 'income' });
-  },
+  'income-add': (el) => addPlanItem(el.dataset.month, { kind: 'income' }),
   'sched-add-task': (el) => addTaskSheet(el.dataset.month, el.dataset.list || null),
 });

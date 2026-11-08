@@ -126,7 +126,7 @@ function budgetSection(id) {
         <span class="budget-pill ${over ? 'over' : ''} ${r.planned ? '' : 'empty'}" style="--c:${color};--fill:${fill}%"><span class="mw-amt">${short(r.spent)} / ${r.planned ? short(r.planned) : '—'}</span></span>
       </a>`;
     }).join('')}</section>`
-    : `<section class="group-card">${emptyState('No budget yet', 'Set how much you want to spend per category in Planned → To Buy.', `<a class="btn btn-primary" href="${routes.budgets(id)}">Set a budget</a>`)}</section>`}`;
+    : `<section class="group-card">${emptyState('No budget yet', 'Set how much you want to spend per category in Planned.', `<a class="btn btn-primary" href="${routes.budgets(id)}">Set a budget</a>`)}</section>`}`;
 }
 
 function searchResults(q) {

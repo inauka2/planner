@@ -6,11 +6,11 @@ import { formatMoney } from '../money.js';
 import { icon } from '../icons.js';
 import { esc, registerActions, dayLabel, emptyState } from '../ui.js';
 import { routes } from '../routes.js';
-import { pairIn } from '../insights.js';
+import { pairIn, scheduledItems, toDisplay } from '../insights.js';
 import { topBar, pillBtn, privacyBtn, largeTitle, monthSwitch, txRow } from './chrome.js';
 import { openTxSheet } from './txsheet.js';
-import { renderBuy } from './buy.js';
-import { renderBills } from './scheduled.js';
+import { renderBuy, categoryList, carryButtons } from './buy.js';
+import { schedRow } from './scheduled.js';
 import { renderSummary } from './summary.js';
 import { renderTodo } from './todo.js';
 
@@ -58,13 +58,11 @@ export function renderDailyPage(id) {
     </main>`;
 }
 
-// ---------- Planned: Bills | To Buy ----------
-const PLAN_VIEWS = [['bills', 'Bills'], ['buy', 'To Buy']];
-
-export function renderPlanPage(id, view = 'bills', path = []) {
+// ---------- Planned: everything to buy or pay this month (bills included), by category ----------
+export function renderPlanPage(id, path = []) {
   const m = state.months[id];
   const closed = !!m.closing;
-  if (view === 'buy' && path[0]) {
+  if (path[0]) {
     // a category (its budget and items) or a subcategory
     return `
       ${topBar({ back: path[1] ? routes.budgets(id, path[0]) : routes.budgets(id), buttons: closed ? [] : [
@@ -72,17 +70,43 @@ export function renderPlanPage(id, view = 'bills', path = []) {
       ] })}
       <main class="content drill">${renderBuy(id, path)}</main>`;
   }
-  const add = view === 'buy'
-    ? pillBtn({ act: 'plan-add', ic: 'plus', label: 'Add item to buy', primary: true, attrs: `data-month="${id}"` })
-    : pillBtn({ act: 'sched-add', ic: 'plus', label: 'Add bill', primary: true, attrs: `data-month="${id}"` });
+  const s = monthSummary(state, id);
+  const t = localDateParts();
+  const toAll = (p) => toDisplay(p.amount || 0, p.currency, 'ALL', s.rates);
+  const stillToBuy = m.plan.filter((p) => p.kind !== 'income' && !p.paid).reduce((sum, p) => sum + toAll(p), 0);
+  const items = scheduledItems(state, id, t.date);
+  const soon = addDays(t.date, 7);
+  const dueSoon = items.filter((x) => x.item.kind !== 'income' && x.due && !x.item.paid && x.due <= soon);
+  const income = items.filter((x) => x.item.kind === 'income');
+
   return `
-    ${topBar({ buttons: [privacyBtn(), ...(closed ? [] : [add])] })}
+    ${topBar({ buttons: [privacyBtn(), ...(closed ? [] : [pillBtn({ act: 'plan-add', ic: 'plus', label: 'Add something to buy or pay', primary: true, attrs: `data-month="${id}"` })])] })}
     <main class="content">
       ${largeTitle('Planned')}
-      <nav class="seg-links two" aria-label="View">${PLAN_VIEWS.map(([k, label]) => `<a href="${k === 'buy' ? routes.budgets(id) : routes.bills(id)}" class="${k === view ? 'on' : ''}" ${k === view ? 'aria-current="page"' : ''}>${label}</a>`).join('')}</nav>
-      ${monthSwitch(id, (x) => (view === 'buy' ? routes.budgets(x) : routes.bills(x)))}
-      ${view === 'buy' ? renderBuy(id).replace(/<h1 class="large-title">To Buy<\/h1>/, '') : renderBills(id)}
+      ${monthSwitch(id, (x) => routes.budgets(x))}
+      <section class="remain-card">
+        ${stat('Spent', allOf(s.spending, s.rates), 'neg')}
+        ${stat('Still to buy', stillToBuy)}
+      </section>
+      ${carryButtons(id, { income: true })}
+      ${dueSoon.length ? `<section class="reg-section ${dueSoon.some((x) => x.status === 'overdue') ? 'overdue' : ''}">
+        <h2 class="day-head"><span>Due soon</span></h2>
+        <ul class="reg-list">${dueSoon.map((x) => schedRow(id, x)).join('')}</ul>
+      </section>` : ''}
+      <h2 class="day-head"><span>Categories</span></h2>
+      ${categoryList(id)}
+      ${income.length ? `<h2 class="day-head"><span>Expected income</span></h2>
+        <ul class="reg-list">${income.map((x) => schedRow(id, x)).join('')}</ul>` : ''}
+      ${closed ? '' : `<button class="text-btn" data-act="income-add" data-month="${id}">${icon('plus')} Expected income (salary…)</button>`}
+      <p class="hint pad">Bills and things to buy are planned, not spent. Tick one when you pay it and the payment is recorded.</p>
     </main>`;
+}
+
+/** "2026-11-08" + 7 days → "2026-11-15" (local dates, no time zones). */
+function addDays(date, n) {
+  const [y, mo, d] = date.split('-').map(Number);
+  const dt = new Date(y, mo - 1, d + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
 // ---------- Summary ----------

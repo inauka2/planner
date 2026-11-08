@@ -18,7 +18,7 @@ const thisMonth = () => localDateParts().monthId;
 const TABS = [
   { key: 'accounts', label: 'Accounts', ic: 'tab-accounts', href: () => routes.accounts() },
   { key: 'daily', label: 'Daily', ic: 'tab-daily', href: () => routes.daily(thisMonth()) },
-  { key: 'plan', label: 'Planned', ic: 'tab-scheduled', href: () => routes.bills(thisMonth()) },
+  { key: 'plan', label: 'Planned', ic: 'tab-scheduled', href: () => routes.budgets(thisMonth()) },
   { key: 'todo', label: 'To Do', ic: 'tab-todo', href: () => routes.todo(thisMonth()) },
   { key: 'summary', label: 'Summary', ic: 'tab-summary', href: () => routes.summary(thisMonth()) },
 ];
@@ -32,7 +32,7 @@ function legacy(parts) {
   const month = isMonthId(p1 || '') ? p1 : thisMonth();
   if (p0 === 'y') return routes.summary(thisMonth());
   if (p0 === 'budgets') return routes.budgets(month, p2, p3);
-  if (p0 === 'scheduled') return p2 === 'todo' ? routes.todo(month, p3) : routes.bills(month);
+  if (p0 === 'scheduled') return p2 === 'todo' ? routes.todo(month, p3) : routes.budgets(month);
   if (p0 === 'reports' && p1 === 'review') return routes.summary(isMonthId(p2 || '') ? p2 : thisMonth());
   if (p0 === 'accounts' && p1 === 'all') return routes.daily(thisMonth());
   if (p0 !== 'm' || !isMonthId(p1 || '')) return null;
@@ -52,9 +52,8 @@ function parseRoute() {
   switch (parts[0]) {
     case 'daily': return { tab: 'daily', nav: 'daily', month: month(parts[1]), depth: 0 };
     case 'plan': {
-      const view = parts[2] === 'buy' ? 'buy' : 'bills';
-      const path = view === 'buy' ? parts.slice(3, 5) : [];
-      return { tab: 'plan', nav: 'plan', month: month(parts[1]), view, path, depth: path.length };
+      const path = parts[2] === 'buy' ? parts.slice(3, 5) : [];
+      return { tab: 'plan', nav: 'plan', month: month(parts[1]), path, depth: path.length };
     }
     case 'summary': return { tab: 'summary', nav: 'summary', month: month(parts[1]), depth: 0 };
     case 'todo': return { tab: 'todo', nav: 'todo', month: month(parts[1]), path: parts.slice(2, 3), depth: parts[2] ? 1 : 0 };
@@ -69,7 +68,7 @@ function parseRoute() {
 function renderScreen(r) {
   switch (r.tab) {
     case 'daily': return renderDailyPage(r.month);
-    case 'plan': return renderPlanPage(r.month, r.view, r.path);
+    case 'plan': return renderPlanPage(r.month, r.path);
     case 'summary': return renderSummaryPage(r.month);
     case 'todo': return renderTodoPage(r.month, r.path);
     case 'reports': return renderReports(r.key, r.month);

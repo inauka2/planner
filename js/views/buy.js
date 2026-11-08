@@ -1,8 +1,10 @@
-// Tab 3 — To Buy: what I plan to spend money on this month, by category.
+// Planned: what I plan to buy or pay this month (bills included), by category.
 // Root → category → (Self-care) subcategory, iOS-style drill-down.
 import { routes } from '../routes.js';
 import { state, updateMonth, uid } from '../store.js';
-import { monthSummary, planTotals, sourceMonthId, monthLabel, categoryPlanned } from '../ledger.js';
+import { monthSummary, planTotals, sourceMonthId, monthLabel, categoryPlanned, localDateParts } from '../ledger.js';
+import { dueDate } from '../insights.js';
+import { longDate } from './chrome.js';
 import { formatMoney, parseAmount, centsToInput, CURRENCIES } from '../money.js';
 import { SELFCARE_ID, missingRecurring, missingUnfinished } from '../defaults.js';
 import { icon, categoryIcon } from '../icons.js';
@@ -54,6 +56,16 @@ function renderRoot(id, m) {
 
     ${carryButtons(id)}
 
+    ${categoryList(id)}
+  `;
+}
+
+/** Every category with what is planned in it; tap one for its budget and items. */
+export function categoryList(id) {
+  const m = state.months[id];
+  const items = expenseItems(m);
+  const closed = !!m.closing;
+  return `
     <ul class="list card flush">
       ${m.categories.map((c) => {
         const ct = totalsOf(items.filter((p) => p.categoryId === c.id));
@@ -90,7 +102,7 @@ function renderSelfcare(id, m, cat) {
   const items = expenseItems(m).filter((p) => p.categoryId === cat.id);
   const loose = items.filter((p) => !p.listId || !cat.lists.some((l) => l.id === p.listId));
   return `
-    <a class="back-link" href="${routes.budgets(id)}">${icon('chev-left')} To Buy</a>
+    <a class="back-link" href="${routes.budgets(id)}">${icon('chev-left')} Planned</a>
     <div class="title-row"><h1 class="large-title">${esc(cat.name)}</h1>
       ${m.closing ? '' : `<button class="glass-btn sm" data-act="cat-edit" data-month="${id}" data-cat="${esc(cat.id)}" aria-label="Rename">${icon('edit')}</button>`}</div>
     ${summaryCard(id, cat, items)}
@@ -113,7 +125,7 @@ function renderItems(id, m, cat, sub) {
   const items = expenseItems(m).filter((p) => p.categoryId === cat.id && (!sub || p.listId === sub.id));
   const closed = !!m.closing;
   return `
-    <a class="back-link" href="${sub ? routes.budgets(id, cat.id) : routes.budgets(id)}">${icon('chev-left')} ${sub ? esc(cat.name) : 'To Buy'}</a>
+    <a class="back-link" href="${sub ? routes.budgets(id, cat.id) : routes.budgets(id)}">${icon('chev-left')} ${sub ? esc(cat.name) : 'Planned'}</a>
     <div class="title-row"><h1 class="large-title">${esc(sub ? sub.name : cat.name)}</h1>
       ${closed ? '' : `<button class="glass-btn sm" data-act="${sub ? 'sub-edit' : 'cat-edit'}" data-month="${id}" data-cat="${esc(cat.id)}" ${sub ? `data-list="${esc(sub.id)}"` : ''} aria-label="Rename">${icon('edit')}</button>`}</div>
     ${sub ? '' : summaryCard(id, cat, items)}
@@ -156,6 +168,8 @@ export function itemList(id, items) {
   const sorted = [...items].sort((a, b) => Number(a.paid) - Number(b.paid));
   return `<ul class="list card flush">${sorted.map((p) => {
     const meta = [];
+    const due = dueDate(id, p);
+    if (due) meta.push(!p.paid && due < localDateParts().date ? `<span class="warn">Was due ${longDate(due)}</span>` : `Due ${longDate(due)}`);
     if (p.recurring) meta.push(`${icon('repeat', 'ic-xs')} Monthly`);
     if (p.taskId && state.months[id].todoLists?.some((l) => l.items.some((t) => t.id === p.taskId))) meta.push(`${icon('tab-todo', 'ic-xs')} From To Do`);
     if (p.priority) meta.push(`<span class="tag prio-${p.priority}">${PRIORITY[p.priority]}</span>`);
