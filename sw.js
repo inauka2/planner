@@ -1,6 +1,6 @@
 // Service worker: precaches the whole app so it opens and works fully offline.
 // To ship an update, change VERSION. Your data (IndexedDB) is never touched by updates.
-const VERSION = '2.0.1';
+const VERSION = '2.1.0';
 const CACHE = `planner-${VERSION}`;
 const ASSETS = [
   './',
@@ -24,11 +24,11 @@ const ASSETS = [
   './js/views/accountsTab.js',
   './js/views/authscreen.js',
   './js/views/budget.js',
-  './js/views/budgets.js',
   './js/views/buy.js',
   './js/views/chrome.js',
   './js/views/daily.js',
   './js/views/importer.js',
+  './js/views/pages.js',
   './js/views/plan.js',
   './js/views/reports.js',
   './js/views/scheduled.js',

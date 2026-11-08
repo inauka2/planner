@@ -3,14 +3,16 @@
 An installable, offline-first web app (PWA) for iPhone, light and dark. No backend.
 **All data stays on your device** (IndexedDB). Nothing is sent to any server.
 
-Five tabs, iOS style (glass tab bar, glass action pill at the top):
+Four simple tabs. Every page has the ⚙︎ Settings button at the top left and one blue **+** at the top right.
 
-- **Accounts:** net worth, your accounts in collapsible groups (by type — Banking, Cash, Savings, Credit Cards, Loans & Debts, Investments — or your own groups via the folder button), each group's total with an eye to leave it out of net worth, *All Transactions*, *Owed to me*, and search (`coffee, >100, <01/12/2026, #tag, @Cash`).
-  - Tap an account for its register: a **Forecast** of upcoming bills and income, then *This Month*, *Last Month*, … with balance / spent / received pills and the running balance on every row. The ••• menu edits the account, reconciles its balance, transfers or imports a bank file.
-- **Budgets:** per month — Remaining and Budgeted, then one progress pill per category (spent / budget). The triangle shows the category's planned items (your *To Buy* list) with checkboxes; tap the name for subcategories and *Set budget*.
-- **Scheduled:** monthly bills, subscriptions and expected income with a due day and account — *Overdue*, *Today*, *Upcoming*, *Paid* — a **calendar** heat map (spent / due) with a balance forecast for any future day, and your **To Do** lists.
-- **Reports:** monthly review & closing, net worth, cash flow, expense categories (donut or bars), budget vs actual, top payees, income vs expenses, profit & loss, income by source. Periods 1m · 3m · 6m · 1y · YTD · All, shown in Lek, Euro or Dollar. Export as CSV or print / save as PDF.
-- **Settings:** accounts and groups, appearance (auto / light / dark), privacy mode (hides every amount — also the eye at the top), import, categories, exchange rates, your sign-in, backup and restore.
+- **Accounts & Budgets:** all your money (with a Lek / Euro / Dollar breakdown), your bank accounts and cash, money people owe you, and this month's budget: how much is left to spend, then one bar per category (spent / budget).
+  - Tap an account to see its transactions with the running balance, and upcoming bills paid from it. The ••• menu edits the account, corrects its balance, transfers money or imports a bank file.
+- **Daily:** what you spent today and this month, and your income. Big **Expense**, **Income** and **Transfer** buttons, then every transaction grouped by day.
+- **Planned:** two parts.
+  - **Bills:** monthly bills, subscriptions and expected salary, with the day they are due. Tick one when you pay it and the payment is recorded.
+  - **To Buy:** what you plan to buy, by category. Open a category to set its budget, add items and use subcategories.
+- **Summary:** the month at a glance (started with, ends with, income, spent), spending by category and by year, and **closing the month**. *More reports* has charts for net worth, cash flow, payees and more.
+- **Settings:** accounts, appearance (auto / light / dark), privacy mode (hides every amount — also the eye at the top), **To Do lists**, reports, import, categories, exchange rates, backup and restore.
 - **Transactions** (blue +): expense, income or transfer, any date, category and subcategory, tags and notes. Paying in USD from a Lek or Euro account records both the price and what the bank took.
 - **Import** CSV, OFX, QFX or QIF statements from your bank into any account; rows already there are skipped.
 - **Currencies:** ALL, EUR and USD are kept separate (one currency per account). The exchange rates (Settings) are only used for the "≈ ALL" figures, budgets and reports, and are saved with each closed month.
@@ -29,7 +31,7 @@ Plain HTML, CSS and JavaScript (ES modules). No framework, no build step, no run
 | `js/defaults.js` | Default accounts, categories, lists and the new-month template |
 | `js/db.js`, `js/store.js` | IndexedDB storage and app state |
 | `js/backup.js` | Backup, restore and CSV export |
-| `js/views/*` | Screens: `accountsTab.js`, `budgets.js`, `scheduled.js`, `reports.js`, `settings.js`; `chrome.js` holds the shared top bar and rows; `plan.js` the logic for planned items; `buy.js`, `todo.js`, `summary.js` the category, to-do and monthly-review screens |
+| `js/views/*` | Screens: `accountsTab.js` (Accounts & Budgets), `pages.js` (Daily, Planned, Summary, To Do), `scheduled.js` (bills), `buy.js` (To Buy), `summary.js`, `todo.js`, `reports.js`, `settings.js`; `chrome.js` holds the shared top bar and rows; `plan.js` the logic for planned items |
 | `sw.js` | Service worker (offline cache, updates) |
 | `tests/` | Unit tests for the money logic (`npm test`) |
 

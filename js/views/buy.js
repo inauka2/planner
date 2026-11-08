@@ -90,7 +90,7 @@ function renderSelfcare(id, m, cat) {
   const items = expenseItems(m).filter((p) => p.categoryId === cat.id);
   const loose = items.filter((p) => !p.listId || !cat.lists.some((l) => l.id === p.listId));
   return `
-    <a class="back-link" href="${routes.budgets(id)}">${icon('chev-left')} Budgets</a>
+    <a class="back-link" href="${routes.budgets(id)}">${icon('chev-left')} To Buy</a>
     <div class="title-row"><h1 class="large-title">${esc(cat.name)}</h1>
       ${m.closing ? '' : `<button class="glass-btn sm" data-act="cat-edit" data-month="${id}" data-cat="${esc(cat.id)}" aria-label="Rename">${icon('edit')}</button>`}</div>
     ${summaryCard(id, cat, items)}
@@ -113,7 +113,7 @@ function renderItems(id, m, cat, sub) {
   const items = expenseItems(m).filter((p) => p.categoryId === cat.id && (!sub || p.listId === sub.id));
   const closed = !!m.closing;
   return `
-    <a class="back-link" href="${sub ? routes.budgets(id, cat.id) : routes.budgets(id)}">${icon('chev-left')} ${sub ? esc(cat.name) : 'Budgets'}</a>
+    <a class="back-link" href="${sub ? routes.budgets(id, cat.id) : routes.budgets(id)}">${icon('chev-left')} ${sub ? esc(cat.name) : 'To Buy'}</a>
     <div class="title-row"><h1 class="large-title">${esc(sub ? sub.name : cat.name)}</h1>
       ${closed ? '' : `<button class="glass-btn sm" data-act="${sub ? 'sub-edit' : 'cat-edit'}" data-month="${id}" data-cat="${esc(cat.id)}" ${sub ? `data-list="${esc(sub.id)}"` : ''} aria-label="Rename">${icon('edit')}</button>`}</div>
     ${sub ? '' : summaryCard(id, cat, items)}

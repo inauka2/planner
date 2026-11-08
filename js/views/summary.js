@@ -90,7 +90,7 @@ function yearCard(id, y, current) {
   return `<section class="card year-card" ${current ? 'data-scroll-here' : ''}>
     <div class="card-head"><h2>${y}</h2><span class="muted small">${yo.totalAll ? `≈ ${formatMoney(yo.totalAll, 'ALL')}` : 'No spending yet'}</span></div>
     <div class="cols">
-      ${yo.months.map((x, i) => `<a class="col ${x.id === id ? 'sel' : ''}" href="${routes.report('review', x.id)}" aria-label="${MONTH_NAMES[i]}${x.active ? `: ${formatMoney(x.spendingAll, 'ALL')}` : ''}">
+      ${yo.months.map((x, i) => `<a class="col ${x.id === id ? 'sel' : ''}" href="${routes.summary(x.id)}" aria-label="${MONTH_NAMES[i]}${x.active ? `: ${formatMoney(x.spendingAll, 'ALL')}` : ''}">
         <span class="col-bar"><span style="height:${x.active ? Math.max(4, Math.round((x.spendingAll / max) * 100)) : 0}%"></span></span>
         <span class="col-label">${MONTH_NAMES[i][0]}</span>
       </a>`).join('')}

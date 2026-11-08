@@ -22,19 +22,18 @@ export function pillBtn({ act = '', href = '', ic, label, primary = false, attrs
 
 export const privacyBtn = () => pillBtn({ act: 'privacy-toggle', ic: state.settings.privacy ? 'eye-off' : 'eye', label: state.settings.privacy ? 'Show amounts' : 'Hide amounts' });
 
-function avatar() {
-  const letter = profileName(user).trim()[0]?.toUpperCase() || '?';
-  return `<a class="avatar" href="#/settings" aria-label="Settings">${esc(letter)}</a>`;
+function settingsBtn() {
+  return `<a class="round-btn" href="#/settings" aria-label="Settings">${icon('tab-settings')}</a>`;
 }
 
 /**
- * Top bar of a tab root: avatar (+ optional inline title) on the left, action pill on the right.
+ * Top bar of a tab root: settings button (+ optional inline title) on the left, action pill on the right.
  * Sub-pages pass `back` (a href) and a centred `title` instead.
  */
 export function topBar({ title = '', subtitle = '', inlineTitle = false, back = null, center = '', buttons = [] }) {
   const left = back
     ? `<a class="round-btn" href="${back}" aria-label="Back">${icon('chev-left')}</a>`
-    : `${avatar()}${inlineTitle ? `<div class="bar-title"><span class="t">${esc(title)}</span>${subtitle ? `<span class="s">${subtitle}</span>` : ''}</div>` : ''}`;
+    : `${settingsBtn()}${inlineTitle ? `<div class="bar-title"><span class="t">${esc(title)}</span>${subtitle ? `<span class="s">${subtitle}</span>` : ''}</div>` : ''}`;
   return `<header class="mw-top">
     <div class="mw-left">${left}</div>
     ${center ? `<div class="mw-center">${center}</div>` : ''}
@@ -103,10 +102,10 @@ function txContext(t) {
 }
 
 /**
- * One register row. `delta` (cents in `deltaCur`) is the change for the account being shown;
+ * One register row (`inDay`: under a day heading, so show the time and account, not the date). `delta` (cents in `deltaCur`) is the change for the account being shown;
  * `balance` the running balance after it. Without them, the amount is shown as spent/received.
  */
-export function txRow(t, { delta = null, balance = null, cur = null } = {}) {
+export function txRow(t, { delta = null, balance = null, cur = null, inDay = false } = {}) {
   let amt;
   let cls;
   if (delta != null) {
@@ -127,7 +126,7 @@ export function txRow(t, { delta = null, balance = null, cur = null } = {}) {
       ${txSquare(t)}
       <div class="reg-main">
         <span class="reg-title">${esc(t.description || '—')} <span class="reg-ctx">(${esc(txContext(t))})</span></span>
-        <span class="reg-date">${longDate(t.date, t.time)}${tags}</span>
+        <span class="reg-date">${inDay ? `${t.time}${t.type === 'transfer' || t.type === 'income' ? '' : ` · ${esc(accountById(state, t.accountId)?.name ?? '')}`}` : longDate(t.date, t.time)}${tags}</span>
       </div>
       <div class="reg-end">
         <span class="mw-amt ${cls}">${amt}</span>

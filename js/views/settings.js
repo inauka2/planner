@@ -7,13 +7,14 @@ import { icon } from '../icons.js';
 import { esc, registerActions, actions, openSheet, fieldError, toast, confirmDialog } from '../ui.js';
 import { localDateParts } from '../ledger.js';
 import { openAccountSheet } from './accounts.js';
-import { topBar, largeTitle, statusLine, accountSquare } from './chrome.js';
+import { topBar, largeTitle, accountSquare } from './chrome.js';
 import { openImportSheet } from './importer.js';
 import { segmented, actions as allActions } from '../ui.js';
-import { user, profiles } from '../app.js';
+import { user, profiles, backHref } from '../app.js';
+import { routes } from '../routes.js';
 import { profileName } from '../auth.js';
 
-export const APP_VERSION = '2.0.1';
+export const APP_VERSION = '2.1.0';
 let persisted = null;
 
 export function renderSettings() {
@@ -24,9 +25,9 @@ export function renderSettings() {
   });
 
   return `
-    ${topBar({})}
+    ${topBar({ back: backHref })}
     <main class="content">
-      ${largeTitle('Settings', statusLine())}
+      ${largeTitle('Settings')}
       <p class="section-label"><span>Accounts</span></p>
       <ul class="list card flush">${s.accounts.map((a) => `
         <li class="row tappable has-icon ${a.archived ? 'faded' : ''}" data-act="acc-open" data-id="${esc(a.id)}">
@@ -35,7 +36,6 @@ export function renderSettings() {
           <span class="row-end">${icon('chev-right')}</span>
         </li>`).join('')}
         <li class="row tappable" data-act="acc-add"><span class="accent">${icon('plus', 'ic-xs')} Add account</span></li>
-        <li class="row tappable" data-act="group-new"><span class="accent">${icon('folder-plus', 'ic-xs')} New account group</span></li>
       </ul>
       <p class="hint" style="padding:0 16px">Add each account once. A balance you type here applies to the current month.</p>
 
@@ -45,6 +45,12 @@ export function renderSettings() {
           ${segmented('theme', [['system', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], s.theme || 'system', { small: true, cls: 'seg-theme' })}</li>
         <li class="row tappable" data-act="privacy-toggle"><div class="row-main"><span class="row-title">Privacy mode</span><span class="row-sub">Hides every amount — handy in public. Also the ${icon('eye', 'ic-xs')} button at the top.</span></div>
           <span class="switch"><input type="checkbox" ${s.privacy ? 'checked' : ''} tabindex="-1"><span></span></span></li>
+      </ul>
+
+      <p class="section-label"><span>More</span></p>
+      <ul class="list card flush">
+        <li><a class="row" href="${routes.todo(localDateParts().monthId)}"><div class="row-main"><span class="row-title">To Do lists</span><span class="row-sub">Tasks and reminders for the month</span></div><span class="row-end">${icon('chev-right')}</span></a></li>
+        <li><a class="row" href="${routes.reports()}"><div class="row-main"><span class="row-title">Reports</span><span class="row-sub">Charts for spending, income, net worth and more</span></div><span class="row-end">${icon('chev-right')}</span></a></li>
       </ul>
 
       <p class="section-label"><span>Data</span></p>

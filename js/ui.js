@@ -352,7 +352,7 @@ export function pairText(pair, { always = false } = {}) {
 }
 
 /** Big ALL amount with a small unit, plus smaller lines for other currencies. */
-export function moneyStack(label, pair, { show = ['EUR'], neg = false } = {}) {
+export function moneyStack(label, pair, { show = [], neg = false } = {}) {
   const others = FOREIGN.filter((c) => show.includes(c) || pair[c]);
   return `<div class="money-stack">
     <p class="eyebrow">${esc(label)}</p>
@@ -361,8 +361,8 @@ export function moneyStack(label, pair, { show = ['EUR'], neg = false } = {}) {
   </div>`;
 }
 
-/** Foreign currencies that should get a line in a group of stacks (EUR always, USD when used). */
-export const shownCurrencies = (...pairs) => ['EUR', ...(pairs.some((p) => p.USD) ? ['USD'] : [])];
+/** Foreign currencies that get a line in a group of stacks: only those actually used, so no "€0.00" clutter. */
+export const shownCurrencies = (...pairs) => ['EUR', 'USD'].filter((c) => pairs.some((p) => p?.[c]));
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

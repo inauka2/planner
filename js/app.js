@@ -1,12 +1,11 @@
-// App bootstrap: hash router, the five-tab shell, motion, global event delegation, service worker.
+// App bootstrap: hash router, the four-tab shell, motion, global event delegation, service worker.
 import { state, load, subscribe, ensureMonth, setWriteErrorHandler, saveSettings } from './store.js';
 import { isMonthId, localDateParts } from './ledger.js';
 import { icon } from './icons.js';
 import { dispatch, registerActions, toast, isSheetOpen, closeSheet, setRenderer, esc } from './ui.js';
 import { routes } from './routes.js';
-import { renderAccounts, renderAllTransactions, renderAccount, resetAccountSearch } from './views/accountsTab.js';
-import { renderBudgets } from './views/budgets.js';
-import { renderScheduled } from './views/scheduled.js';
+import { renderAccounts, renderAccount, resetAccountSearch } from './views/accountsTab.js';
+import { renderDailyPage, renderPlanPage, renderSummaryPage, renderTodoPage } from './views/pages.js';
 import { renderReports } from './views/reports.js';
 import { renderSettings, importBackupFile } from './views/settings.js';
 import './views/budget.js'; // money owed to me + balance sheets (actions)
@@ -15,57 +14,66 @@ import { startSession, allUsers, useProfile } from './auth.js';
 import { useDatabase } from './db.js';
 import { profilePicker } from './views/authscreen.js';
 
+const thisMonth = () => localDateParts().monthId;
 const TABS = [
-  { key: 'accounts', label: 'Accounts', href: () => routes.accounts() },
-  { key: 'budgets', label: 'Budgets', href: () => routes.budgets(localDateParts().monthId) },
-  { key: 'scheduled', label: 'Scheduled', href: () => routes.scheduled(localDateParts().monthId) },
-  { key: 'reports', label: 'Reports', href: () => routes.reports() },
-  { key: 'settings', label: 'Settings', href: () => routes.settings() },
+  { key: 'accounts', label: 'Accounts', ic: 'tab-accounts', href: () => routes.accounts() },
+  { key: 'daily', label: 'Daily', ic: 'tab-daily', href: () => routes.daily(thisMonth()) },
+  { key: 'plan', label: 'Planned', ic: 'tab-scheduled', href: () => routes.bills(thisMonth()) },
+  { key: 'summary', label: 'Summary', ic: 'tab-summary', href: () => routes.summary(thisMonth()) },
 ];
 
 const app = document.getElementById('app');
 let last = null; // previous route, for scroll keeping and transitions
 
-/** Old (v1) links: #/m/<month>/<tab>/… and #/y/<year>. */
+/** Links from earlier versions: #/m/<month>/<tab>/…, #/y/<year>, #/budgets, #/scheduled, #/accounts/all. */
 function legacy(parts) {
-  if (parts[0] === 'y') return routes.accounts();
-  if (parts[0] !== 'm' || !isMonthId(parts[1] || '')) return null;
-  const [, id, tab, a, b] = parts;
-  if (tab === 'buy') return routes.budgets(id, a, b);
-  if (tab === 'todo') return routes.todo(id, a);
-  if (tab === 'summary') return routes.report('review', id);
-  if (tab === 'daily') return routes.allTransactions();
+  const [p0, p1, p2, p3, p4] = parts;
+  const month = isMonthId(p1 || '') ? p1 : thisMonth();
+  if (p0 === 'y') return routes.summary(thisMonth());
+  if (p0 === 'budgets') return routes.budgets(month, p2, p3);
+  if (p0 === 'scheduled') return p2 === 'todo' ? routes.todo(month, p3) : routes.bills(month);
+  if (p0 === 'reports' && p1 === 'review') return routes.summary(isMonthId(p2 || '') ? p2 : thisMonth());
+  if (p0 === 'accounts' && p1 === 'all') return routes.daily(thisMonth());
+  if (p0 !== 'm' || !isMonthId(p1 || '')) return null;
+  if (p2 === 'buy') return routes.budgets(p1, p3, p4);
+  if (p2 === 'todo') return routes.todo(p1, p3);
+  if (p2 === 'summary') return routes.summary(p1);
+  if (p2 === 'daily') return routes.daily(p1);
   return routes.accounts();
 }
 
+/** `tab` picks the screen; `nav` the highlighted tab (none for Settings, To Do and Reports). */
 function parseRoute() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   const old = legacy(parts);
   if (old) { history.replaceState(null, '', old); return parseRoute(); }
-  const month = (x) => (isMonthId(x || '') ? x : localDateParts().monthId);
+  const month = (x) => (isMonthId(x || '') ? x : thisMonth());
   switch (parts[0]) {
-    case 'budgets': return { tab: 'budgets', month: month(parts[1]), path: parts.slice(2, 4), depth: parts.length > 2 ? parts.length - 2 : 0 };
-    case 'scheduled': {
-      const view = ['calendar', 'todo'].includes(parts[2]) ? parts[2] : 'list';
-      return { tab: 'scheduled', month: month(parts[1]), view, path: view === 'todo' ? parts.slice(3, 4) : [], depth: view === 'todo' && parts[3] ? 1 : 0 };
+    case 'daily': return { tab: 'daily', nav: 'daily', month: month(parts[1]), depth: 0 };
+    case 'plan': {
+      const view = parts[2] === 'buy' ? 'buy' : 'bills';
+      const path = view === 'buy' ? parts.slice(3, 5) : [];
+      return { tab: 'plan', nav: 'plan', month: month(parts[1]), view, path, depth: path.length };
     }
-    case 'reports': return { tab: 'reports', key: parts[1] || null, month: isMonthId(parts[2] || '') ? parts[2] : null, depth: parts[1] ? 1 : 0 };
-    case 'settings': return { tab: 'settings', depth: 0 };
+    case 'summary': return { tab: 'summary', nav: 'summary', month: month(parts[1]), depth: 0 };
+    case 'todo': return { tab: 'todo', month: month(parts[1]), path: parts.slice(2, 3), depth: parts[2] ? 2 : 1 };
+    case 'reports': return { tab: 'reports', nav: 'summary', key: parts[1] || null, month: isMonthId(parts[2] || '') ? parts[2] : null, depth: parts[1] ? 2 : 1 };
+    case 'settings': return { tab: 'settings', depth: 1 };
     default:
-      if (parts[1] === 'all') return { tab: 'accounts', sub: 'all', depth: 1 };
-      if (parts[1] === 'a' && parts[2]) return { tab: 'accounts', sub: 'account', id: parts[2], depth: 1 };
-      return { tab: 'accounts', depth: 0 };
+      if (parts[1] === 'a' && parts[2]) return { tab: 'accounts', nav: 'accounts', sub: 'account', id: parts[2], depth: 1 };
+      return { tab: 'accounts', nav: 'accounts', depth: 0 };
   }
 }
 
 function renderScreen(r) {
   switch (r.tab) {
-    case 'budgets': return renderBudgets(r.month, r.path);
-    case 'scheduled': return renderScheduled(r.month, r.view, r.path);
+    case 'daily': return renderDailyPage(r.month);
+    case 'plan': return renderPlanPage(r.month, r.view, r.path);
+    case 'summary': return renderSummaryPage(r.month);
+    case 'todo': return renderTodoPage(r.month, r.path);
     case 'reports': return renderReports(r.key, r.month);
     case 'settings': return renderSettings();
     default:
-      if (r.sub === 'all') return renderAllTransactions();
       if (r.sub === 'account') return renderAccount(r.id);
       return renderAccounts();
   }
@@ -73,9 +81,12 @@ function renderScreen(r) {
 
 function tabBar(active) {
   return `<nav class="mw-tabbar" aria-label="Sections">
-    ${TABS.map((t) => `<a href="${t.href()}" class="mw-tab ${t.key === active ? 'active' : ''}" ${t.key === active ? 'aria-current="page"' : ''}>${icon(`tab-${t.key}`)}<span>${t.label}</span></a>`).join('')}
+    ${TABS.map((t) => `<a href="${t.href()}" class="mw-tab ${t.key === active ? 'active' : ''}" ${t.key === active ? 'aria-current="page"' : ''}>${icon(t.ic)}<span>${t.label}</span></a>`).join('')}
   </nav>`;
 }
+
+/** Where Settings' back button returns: the last tab page you were on. */
+export let backHref = '#/accounts';
 
 // Pages animate in only when opened from inside the app. When iOS's own swipe-back gesture
 // (or the browser back button) navigates, iOS already animates — a second animation flickers.
@@ -92,7 +103,7 @@ function transitionFor(r) {
   navIntent = false;
   if (routeKey(last) === routeKey(r)) return null;
   if (!fromTap) return 'none';
-  if (last.tab !== r.tab) return 'enter';
+  if (last.nav !== r.nav || last.tab !== r.tab) return r.depth > last.depth ? 'push' : r.depth < last.depth ? 'pop' : 'enter';
   if (r.depth > last.depth) return 'push';
   if (r.depth < last.depth) return 'pop';
   return 'fade';
@@ -111,11 +122,15 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyDis
 
 export async function render() {
   const r = parseRoute();
-  if ((r.tab === 'budgets' || r.tab === 'scheduled' || (r.tab === 'reports' && r.month)) && !state.months[r.month]) {
+  if (r.tab === 'accounts' && !r.sub && !state.months[thisMonth()]) {
+    try { await ensureMonth(thisMonth()); } catch { /* the page still shows accounts */ }
+  }
+  if (r.month && !state.months[r.month]) {
     try { await ensureMonth(r.month); } catch { /* error toast shown by store */ }
     if (!state.months[r.month]) { app.innerHTML = '<p class="boot">Could not open this month.</p>'; return; }
   }
   if (last && (last.tab !== r.tab || last.id !== r.id || last.sub !== r.sub)) resetAccountSearch();
+  if (r.nav && r.tab !== 'reports') backHref = location.hash || '#/accounts';
   applyDisplay();
   const motionClass = transitionFor(r);
   const y = window.scrollY;
@@ -125,10 +140,10 @@ export async function render() {
   } catch (e) {
     console.error(e);
     html = `<main class="content"><div class="banner danger">Something went wrong showing this screen: ${esc(e.message)}. Your data is safe.</div>
-      <a class="btn btn-ghost" href="#/accounts">Back to accounts</a></main>`;
+      <a class="btn btn-ghost" href="#/accounts">Back to Accounts</a></main>`;
   }
   const focused = document.activeElement?.dataset?.search;
-  app.innerHTML = html + tabBar(r.tab);
+  app.innerHTML = html + tabBar(r.nav);
   document.body.dataset.screen = r.tab;
   if (motionClass && motionClass !== 'none') app.querySelector('.content')?.classList.add(motionClass);
   window.scrollTo(0, motionClass ? 0 : y);

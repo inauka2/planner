@@ -42,9 +42,9 @@ export function renderReports(key = null, monthId = null) {
   if (key === 'review') return renderReview(monthId || localDateParts().monthId);
   if (key && TITLES[key]) return renderReport(key);
   return `
-    ${topBar({ buttons: [privacyBtn()] })}
+    ${topBar({ back: routes.summary(localDateParts().monthId), buttons: [privacyBtn()] })}
     <main class="content">
-      ${largeTitle('Reports', statusLine())}
+      ${largeTitle('Reports')}
       ${REPORTS.map(([group, list]) => `
         <p class="section-cap">${group}</p>
         <ul class="report-list">${list.map(([k, title, sub, ic]) => `

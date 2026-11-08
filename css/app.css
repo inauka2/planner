@@ -692,7 +692,7 @@ body { background: var(--bg); }
 .mw-tabbar {
   position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); bottom: var(--dock-gap);
   width: min(calc(100% - 24px), 520px); height: 64px; padding: 4px; border-radius: 32px;
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
   background: var(--glass); border: 0.5px solid var(--glass-edge); box-shadow: var(--glass-shine);
   -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8);
 }
@@ -996,4 +996,26 @@ details.more > .field + .field { margin-top: 12px; }
   .content { padding: 0; max-width: none; }
   .chart-card, .legend-table, .pl-scroll { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
   html.privacy .mw-amt { filter: none; }
+}
+
+/* ---------- simple layout (v2.1): four tabs ---------- */
+.net-card .net-big { margin-top: -6px; }
+.section-label .link-btn { font-size: 14px; padding: 0; }
+.seg-links.two { grid-template-columns: 1fr 1fr; }
+.remain-card.three-up { grid-template-columns: repeat(3, 1fr); }
+.remain-card.three-up .remain-big { font-size: 17px; }
+.quick-add { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px; }
+.quick-add .btn { min-height: 50px; padding: 0 8px; font-size: 15px; gap: 6px; }
+.quick-add .btn .ic { width: 18px; height: 18px; }
+.day-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 17px; font-weight: 600; padding: 6px 6px 0; }
+.day-head .mw-amt { font-size: 15px; font-weight: 500; color: var(--text-2); }
+.budget-list { display: flex; flex-direction: column; }
+.budget-line { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; min-height: 56px; color: var(--text); position: relative; }
+.budget-line + .budget-line::before { content: ""; position: absolute; top: 0; left: 56px; right: 0; height: 1px; background: var(--sep); }
+.budget-line:active { background: var(--press); }
+.budget-line .budget-name { font-size: 16px; }
+.budget-line .budget-pill { min-width: 40%; height: 30px; font-size: 14px; }
+@media (max-width: 360px) {
+  .quick-add .btn { font-size: 14px; }
+  .quick-add .btn .ic { display: none; }
 }

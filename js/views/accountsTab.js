@@ -1,31 +1,26 @@
-// Accounts tab: grouped accounts with totals, net worth, "All Transactions", search,
-// money owed to me, and each account's register (forecast + month sections, running balance).
-import { state, saveSettings, uid, ensureMonth } from '../store.js';
-import { localDateParts, getRates, accountById, nextMonthId, monthBounds } from '../ledger.js';
+// Accounts & Budgets tab: total money, your accounts, money owed to you, and this month's
+// budget per category. Tapping an account opens its transactions (forecast + months, running balance).
+import { state, saveSettings, ensureMonth } from '../store.js';
+import { localDateParts, getRates, accountById, nextMonthId, monthBounds, monthSummary, planTotals, MONTH_NAMES } from '../ledger.js';
 import { formatMoney, centsToInput, parseAmount, CURRENCIES, CURRENCY_NAMES } from '../money.js';
 import { icon } from '../icons.js';
-import { KIND_GROUPS, LIABILITY_KINDS } from '../defaults.js';
-import { esc, registerActions, openSheet, fieldError, toast, confirmDialog, chooseDialog, emptyState, rerender } from '../ui.js';
+import { LIABILITY_KINDS, categoryStyle } from '../defaults.js';
+import { esc, registerActions, openSheet, fieldError, toast, chooseDialog, emptyState, rerender } from '../ui.js';
 import { routes } from '../routes.js';
 import {
-  balancesNow, currentBalanceMonth, accountRegister, allRegister, accountForecast, searchTransactions, toDisplay, pairIn,
+  balancesNow, currentBalanceMonth, accountRegister, accountForecast, searchTransactions, pairIn, budgetStatus,
 } from '../insights.js';
 import {
-  topBar, pillBtn, privacyBtn, statusLine, accountSquare, square, txRow, statPills, monthHeading, searchField, longDate,
+  topBar, pillBtn, privacyBtn, largeTitle, accountSquare, square, txRow, statPills, monthHeading, searchField, longDate,
 } from './chrome.js';
 import { openTxSheet } from './txsheet.js';
 import { openAccountSheet, setBalances } from './accounts.js';
 import { planAccount, recordPlan } from './plan.js';
 import { openImportSheet } from './importer.js';
 
-const COLLAPSE_KEY = 'planner.collapsed';
-let collapsed = new Set();
-try { collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]')); } catch { /* private mode */ }
-const saveCollapsed = () => { try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed])); } catch { /* ignore */ } };
-
 let showHidden = false;
 let pageMonths = 6; // month sections shown in a register before "Show earlier"
-export const search = { accounts: '', all: '', account: '' };
+export const search = { account: '' };
 
 const today = () => localDateParts();
 const ratesNow = () => {
@@ -33,99 +28,48 @@ const ratesNow = () => {
   return getRates(state, id || today().monthId);
 };
 
-/** Accounts arranged in groups: custom groups first, then one group per account type. */
-export function accountGroups() {
-  const accs = state.settings.accounts.filter((a) => showHidden || !a.archived);
-  const custom = (state.settings.accountGroups || []).map((g) => ({ key: `g:${g.id}`, id: g.id, name: g.name, custom: true, accounts: accs.filter((a) => a.groupId === g.id) }));
-  const known = new Set(custom.map((g) => g.id));
-  const byKind = Object.entries(KIND_GROUPS).map(([kind, name]) => ({
-    key: `k:${kind}`, name, kind, accounts: accs.filter((a) => (!a.groupId || !known.has(a.groupId)) && (a.kind || 'other') === kind),
-  }));
-  return [...custom, ...byKind].filter((g) => g.accounts.length || g.custom);
-}
-
-/** One total for a group: in its single currency, else ≈ ALL. */
-function groupTotal(accounts, bal, rates) {
-  const curs = [...new Set(accounts.map((a) => a.currency))];
-  if (curs.length === 1) return { cents: accounts.reduce((s, a) => s + (bal[a.id] || 0), 0), cur: curs[0], approx: false };
-  return { cents: accounts.reduce((s, a) => s + toDisplay(bal[a.id] || 0, a.currency, 'ALL', rates), 0), cur: 'ALL', approx: true };
-}
-
-// ---------- accounts overview ----------
+// ---------- Accounts & Budgets ----------
 export function renderAccounts() {
   const t = today();
   const bal = balancesNow(state, t.monthId);
   const rates = ratesNow();
-  const groups = accountGroups();
-  const hidden = new Set(state.settings.hiddenGroups || []);
+  const accs = state.settings.accounts.filter((a) => showHidden || !a.archived);
   const totals = { ALL: 0, EUR: 0, USD: 0 };
-  for (const g of groups) {
-    if (hidden.has(g.key)) continue;
-    for (const a of g.accounts) if (!a.archived) totals[a.currency] += bal[a.id] || 0;
-  }
+  for (const a of state.settings.accounts) if (!a.archived) totals[a.currency] += bal[a.id] || 0;
   const net = pairIn(totals, 'ALL', rates);
   const archivedCount = state.settings.accounts.filter((a) => a.archived).length;
   const last = state.settings.lastBackupAt;
   const daysSince = last ? Math.floor((Date.now() - Date.parse(last)) / 864e5) : null;
   const needsBackup = state.transactions.length > 0 && (daysSince === null || daysSince > 30);
-  const q = search.accounts;
+  const multi = CURRENCIES.filter((c) => totals[c] || state.settings.accounts.some((a) => !a.archived && a.currency === c));
 
   return `
-    ${topBar({ title: 'Accounts', subtitle: statusLine(), inlineTitle: true, buttons: [
+    ${topBar({ buttons: [
       privacyBtn(),
-      pillBtn({ act: 'acc-view-menu', ic: 'sliders', label: 'View options' }),
-      pillBtn({ act: 'group-new', ic: 'folder-plus', label: 'New group' }),
-      pillBtn({ act: 'new-tx', ic: 'plus', label: 'New transaction', primary: true }),
+      pillBtn({ act: 'acc-new-here', ic: 'plus', label: 'Add account', primary: true }),
     ] })}
     <main class="content">
       ${state.storageError ? `<div class="banner danger">Storage is unavailable (${esc(state.storageError.message)}). Changes can’t be saved. In Safari, turn off Private Browsing.</div>` : ''}
       ${needsBackup ? `<a class="banner" href="${routes.settings()}">${icon('download')} <span>${daysSince === null ? 'You haven’t made a backup yet.' : `Last backup was ${daysSince} days ago.`} <b>Back up now</b></span></a>` : ''}
+      ${largeTitle('Accounts & Budgets')}
 
       <section class="net-card">
-        <div class="net-cols">
-          <div><p class="cap">Net worth</p><p class="net-big ${net < 0 ? 'neg' : ''}"><span class="mw-amt">≈ ${formatMoney(net, 'ALL')}</span></p></div>
-        </div>
-        <div class="net-cur">${CURRENCIES.filter((c) => c === 'ALL' || totals[c] || state.settings.accounts.some((a) => a.currency === c)).map((c) => `
-          <span><span class="cap">${CURRENCY_NAMES[c]}</span><span class="mw-amt ${totals[c] < 0 ? 'neg' : ''}">${formatMoney(totals[c], c)}</span></span>`).join('')}</div>
+        <p class="cap">All my money</p>
+        <p class="net-big ${net < 0 ? 'neg' : ''}"><span class="mw-amt">${multi.length > 1 ? '≈ ' : ''}${formatMoney(net, 'ALL')}</span></p>
+        ${multi.length > 1 ? `<div class="net-cur">${multi.map((c) => `
+          <span><span class="cap">${CURRENCY_NAMES[c]}</span><span class="mw-amt ${totals[c] < 0 ? 'neg' : ''}">${formatMoney(totals[c], c)}</span></span>`).join('')}</div>` : ''}
       </section>
 
-      <div class="search-wrap">
-        ${searchField('accounts', q, 'Search: coffee, >100, #tag, @Cash')}
-        <div data-search-results="accounts">${q ? searchResults(q) : ''}</div>
-      </div>
+      <p class="section-label"><span>Accounts</span></p>
+      <section class="group-card open"><ul class="acc-list">
+        ${accs.map((a) => accountRow(a, bal[a.id] || 0)).join('')}
+        <li><button class="acc-row add" data-act="acc-new-here">${icon('plus')}<span>Add bank account or cash</span></button></li>
+      </ul></section>
+      ${archivedCount ? `<button class="text-btn" data-act="acc-toggle-hidden">${showHidden ? 'Hide' : 'Show'} ${archivedCount} hidden account${archivedCount > 1 ? 's' : ''}</button>` : ''}
 
-      <div data-hide-on-search ${q ? 'hidden' : ''}>
-        <a class="all-tx" href="${routes.allTransactions()}">${icon('list')}<span>All Transactions</span>${icon('chev-right')}</a>
-
-        ${groups.length ? groups.map((g) => groupCard(g, bal, rates, hidden.has(g.key))).join('') : `<section class="group-card">${emptyState('Add your accounts', 'Bank accounts, cash, savings, cards and loans — each in its own currency.', '<button class="btn btn-primary" data-act="acc-new-here">Add account</button>')}</section>`}
-
-        ${owedCard()}
-
-        <div class="stack">
-          <button class="text-btn" data-act="acc-new-here">${icon('plus')} Add account</button>
-          ${archivedCount ? `<button class="text-btn" data-act="acc-toggle-hidden">${showHidden ? 'Hide' : 'Show'} ${archivedCount} hidden account${archivedCount > 1 ? 's' : ''}</button>` : ''}
-        </div>
-      </div>
+      ${owedSection()}
+      ${budgetSection(t.monthId)}
     </main>`;
-}
-
-function groupCard(g, bal, rates, excluded) {
-  const open = !collapsed.has(g.key);
-  const tot = groupTotal(g.accounts.filter((a) => !a.archived), bal, rates);
-  return `<section class="group-card ${open ? 'open' : ''}">
-    <div class="group-head">
-      <button class="group-toggle" data-act="group-toggle" data-key="${esc(g.key)}" aria-expanded="${open}">
-        ${icon(open ? 'tri-down' : 'tri-right', 'tri')}<span class="group-name">${esc(g.name)}</span>
-      </button>
-      <span class="total-pill ${excluded ? 'off' : ''} ${tot.cents < 0 ? 'neg' : ''}">
-        <span class="mw-amt">${tot.approx ? '≈ ' : ''}${formatMoney(tot.cents, tot.cur)}</span>
-        <button data-act="group-eye" data-key="${esc(g.key)}" aria-label="${excluded ? 'Include in net worth' : 'Leave out of net worth'}">${icon(excluded ? 'eye-off' : 'eye')}</button>
-      </span>
-      ${g.custom ? `<button class="round-btn sm" data-act="group-edit" data-id="${esc(g.id)}" aria-label="Edit group">${icon('more')}</button>` : ''}
-    </div>
-    ${open ? `<ul class="acc-list">${g.accounts.map((a) => accountRow(a, bal[a.id] || 0)).join('')}
-      ${g.custom && !g.accounts.length ? `<li class="acc-empty">No accounts yet. Choose this group when you edit an account.</li>` : ''}</ul>` : ''}
-  </section>`;
 }
 
 function accountRow(a, cents) {
@@ -138,29 +82,51 @@ function accountRow(a, cents) {
   </a></li>`;
 }
 
-function owedCard() {
+function owedSection() {
   const open = state.receivables.filter((r) => !r.received);
-  const key = 'owed';
-  const isOpen = !collapsed.has(key);
   const totals = { ALL: 0, EUR: 0, USD: 0 };
   open.forEach((r) => { totals[r.currency] += r.amount; });
-  const text = CURRENCIES.filter((c) => totals[c]).map((c) => formatMoney(totals[c], c)).join(' · ') || formatMoney(0, 'ALL');
+  const text = CURRENCIES.filter((c) => totals[c]).map((c) => formatMoney(totals[c], c)).join(' · ');
   const monthId = today().monthId;
-  return `<section class="group-card ${isOpen ? 'open' : ''}">
-    <div class="group-head">
-      <button class="group-toggle" data-act="group-toggle" data-key="${key}" aria-expanded="${isOpen}">
-        ${icon(isOpen ? 'tri-down' : 'tri-right', 'tri')}<span class="group-name">Owed to me</span>
-      </button>
-      <span class="total-pill owed"><span class="mw-amt">${text}</span></span>
-    </div>
-    ${isOpen ? `<ul class="acc-list">
+  return `<p class="section-label"><span>Owed to me</span>${text ? `<span class="mw-amt">${text}</span>` : ''}</p>
+    <section class="group-card open"><ul class="acc-list">
       ${open.map((r) => `<li><button class="acc-row" data-act="owed-open" data-id="${esc(r.id)}" data-month="${monthId}">
         ${square('#ff9f0a', 'kind-owed')}
         <span class="acc-main"><span class="acc-name">${esc(r.description)}</span><span class="acc-bal"><span class="mw-amt">${formatMoney(r.amount, r.currency)}</span></span></span>
       </button></li>`).join('')}
       <li><button class="acc-row add" data-act="owed-add">${icon('plus')}<span>Someone owes me money</span></button></li>
-    </ul>` : ''}
-  </section>`;
+    </ul></section>`;
+}
+
+/** Whole units, no "ALL" suffix and no decimals — fits inside a progress pill. */
+const short = (cents) => formatMoney(Math.round(cents / 100) * 100, 'ALL').replace(' ALL', '').replace(/\.00$/, '');
+
+/** This month's budget: remaining vs budgeted, then one progress pill per category. */
+function budgetSection(id) {
+  const m = state.months[id];
+  if (!m) return '';
+  const s = monthSummary(state, id);
+  const rows = budgetStatus(state, id, planTotals(m), 'ALL').filter((r) => r.planned || r.spent);
+  const budgeted = rows.reduce((t, r) => t + r.planned, 0);
+  const spent = pairIn(s.spendingByPrice, 'ALL', s.rates);
+  const remaining = budgeted - spent;
+  const name = MONTH_NAMES[Number(id.slice(5)) - 1];
+  return `<p class="section-label"><span>Budget · ${name}</span><a class="link-btn" href="${routes.budgets(id)}">Edit</a></p>
+    <section class="remain-card">
+      <div><p class="cap accent-cap">Left to spend</p><p class="remain-big ${remaining < 0 ? 'neg' : ''}"><span class="mw-amt">${formatMoney(remaining, 'ALL')}</span></p></div>
+      <div><p class="cap accent-cap">Budget</p><p class="remain-big"><span class="mw-amt">${formatMoney(budgeted, 'ALL')}</span></p></div>
+    </section>
+    ${rows.length ? `<section class="group-card open budget-list">${rows.map((r) => {
+      const { color, icon: ic } = categoryStyle(r.cat.id, m.categories.indexOf(r.cat));
+      const over = r.planned && r.spent > r.planned;
+      const fill = r.planned ? Math.min(100, Math.round((r.spent / r.planned) * 100)) : 100;
+      return `<a class="budget-line" href="${routes.budgets(id, r.cat.id)}">
+        ${square(color, ic, 'sm')}
+        <span class="budget-name">${esc(r.cat.name)}</span>
+        <span class="budget-pill ${over ? 'over' : ''} ${r.planned ? '' : 'empty'}" style="--c:${color};--fill:${fill}%"><span class="mw-amt">${short(r.spent)} / ${r.planned ? short(r.planned) : '—'}</span></span>
+      </a>`;
+    }).join('')}</section>`
+    : `<section class="group-card">${emptyState('No budget yet', 'Set how much you want to spend per category in Planned → To Buy.', `<a class="btn btn-primary" href="${routes.budgets(id)}">Set a budget</a>`)}</section>`}`;
 }
 
 function searchResults(q) {
@@ -170,39 +136,11 @@ function searchResults(q) {
     <ul class="reg-list">${res.slice(0, 200).map((t) => txRow(t)).join('')}</ul>`;
 }
 
-// ---------- all transactions ----------
-export function renderAllTransactions() {
-  const q = search.all;
-  const groups = allRegister(state);
-  return `
-    ${topBar({ back: routes.accounts(), center: '<span class="center-title">All Transactions</span>', buttons: [
-      pillBtn({ act: 'new-tx', ic: 'plus', label: 'New transaction', primary: true }),
-    ] })}
-    <main class="content">
-      <div class="search-wrap">
-        ${searchField('all', q)}
-        <div data-search-results="all">${q ? searchResults(q) : ''}</div>
-      </div>
-      <div data-hide-on-search ${q ? 'hidden' : ''}>
-        ${groups.length ? groups.slice(0, pageMonths).map((g) => `
-          <section class="reg-section">
-            <h2 class="reg-head">${monthHeading(g.monthId)}</h2>
-            ${statPills([
-              [`Spent ${formatMoney(pairIn(g.spending, 'ALL', g.rates), 'ALL')}`, 'neg'],
-              [`Income ${formatMoney(pairIn(g.income, 'ALL', g.rates), 'ALL')}`, 'pos'],
-            ])}
-            <ul class="reg-list">${g.txs.map((t) => txRow(t)).join('')}</ul>
-          </section>`).join('') : `<section class="group-card">${emptyState('No transactions yet', 'Tap <b>+</b> to add an expense, income or transfer.')}</section>`}
-        ${groups.length > pageMonths ? '<button class="btn btn-ghost btn-block" data-act="reg-more">Show earlier months</button>' : ''}
-      </div>
-    </main>`;
-}
-
 // ---------- one account ----------
 export function renderAccount(accId) {
   const a = accountById(state, accId);
   if (!a) {
-    return `${topBar({ back: routes.accounts() })}<main class="content"><section class="group-card">${emptyState('Account not found', '', `<a class="btn btn-primary" href="${routes.accounts()}">Back to accounts</a>`)}</section></main>`;
+    return `${topBar({ back: routes.accounts() })}<main class="content"><section class="group-card">${emptyState('Account not found', '', `<a class="btn btn-primary" href="${routes.accounts()}">Back to Accounts</a>`)}</section></main>`;
   }
   const t = today();
   const bal = balancesNow(state, t.monthId)[a.id] || 0;
@@ -277,18 +215,6 @@ async function newTx(el) {
 registerActions({
   'new-tx': (el) => newTx(el),
   'privacy-toggle': () => saveSettings({ privacy: !state.settings.privacy }),
-  'group-toggle': (el) => {
-    const k = el.dataset.key;
-    if (collapsed.has(k)) collapsed.delete(k); else collapsed.add(k);
-    saveCollapsed();
-    rerender();
-  },
-  'group-eye': (el) => {
-    const k = el.dataset.key;
-    const hidden = new Set(state.settings.hiddenGroups || []);
-    if (hidden.has(k)) hidden.delete(k); else hidden.add(k);
-    return saveSettings({ hiddenGroups: [...hidden] });
-  },
   'acc-toggle-hidden': () => { showHidden = !showHidden; rerender(); },
   'reg-more': () => { pageMonths += 6; rerender(); },
   'acc-new-here': async () => {
@@ -296,32 +222,6 @@ registerActions({
     await ensureMonth(id);
     openAccountSheet({ monthId: id });
   },
-  'acc-view-menu': async () => {
-    const archived = state.settings.accounts.filter((a) => a.archived).length;
-    const choice = await chooseDialog({
-      title: 'Accounts',
-      options: [
-        { key: 'add', label: 'Add account', primary: true },
-        { key: 'import', label: 'Import transactions', hint: 'CSV, OFX, QFX or QIF file from your bank' },
-        ...(archived ? [{ key: 'hidden', label: `${showHidden ? 'Hide' : 'Show'} hidden accounts (${archived})` }] : []),
-        { key: 'expand', label: collapsed.size ? 'Expand all groups' : 'Collapse all groups' },
-      ],
-    });
-    if (choice === 'add') {
-      const id = today().monthId;
-      await ensureMonth(id);
-      openAccountSheet({ monthId: id });
-    } else if (choice === 'import') openImportSheet();
-    else if (choice === 'hidden') { showHidden = !showHidden; rerender(); }
-    else if (choice === 'expand') {
-      if (collapsed.size) collapsed.clear();
-      else for (const g of accountGroups()) collapsed.add(g.key);
-      saveCollapsed();
-      rerender();
-    }
-  },
-  'group-new': () => groupSheet(null),
-  'group-edit': (el) => groupSheet((state.settings.accountGroups || []).find((g) => g.id === el.dataset.id)),
   'acc-menu': async (el) => {
     const a = accountById(state, el.dataset.id);
     if (!a) return;
@@ -361,34 +261,6 @@ function reconcileSheet(a, monthId) {
       if (!p.ok) return fieldError(form, 'real', p.error);
       const changed = await setBalances(monthId, { [a.id]: p.cents }, 'Reconciliation');
       toast(changed ? 'Balance reconciled' : 'Already matches');
-    },
-  });
-}
-
-function groupSheet(g) {
-  openSheet({
-    title: g ? 'Edit group' : 'New group',
-    body: `<label class="field"><span class="label">Name</span>
-        <input class="input" name="gname" maxlength="40" value="${esc(g?.name ?? '')}" placeholder="e.g. My cards, Family, Business" autofocus></label>
-      <p class="hint">Put accounts in this group from each account’s settings. Accounts without a group are grouped by type.</p>
-      ${g ? '<button type="button" class="btn btn-danger-ghost" data-act="group-delete">Delete group</button>' : ''}`,
-    actions: {
-      'group-delete': async () => {
-        const ok = await confirmDialog({ title: `Delete “${esc(g.name)}”?`, message: 'Its accounts stay and go back to being grouped by type.', confirmLabel: 'Delete', danger: true });
-        if (!ok) return;
-        await saveSettings({
-          accountGroups: state.settings.accountGroups.filter((x) => x.id !== g.id),
-          accounts: state.settings.accounts.map((a) => (a.groupId === g.id ? { ...a, groupId: null } : a)),
-        });
-        toast('Group deleted');
-      },
-    },
-    onSubmit: async (form) => {
-      const name = form.gname.value.trim();
-      if (!name) return fieldError(form, 'gname', 'Name the group');
-      const groups = state.settings.accountGroups || [];
-      await saveSettings({ accountGroups: g ? groups.map((x) => (x.id === g.id ? { ...x, name } : x)) : [...groups, { id: uid(), name }] });
-      toast(g ? 'Saved' : 'Group added');
     },
   });
 }

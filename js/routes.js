@@ -1,21 +1,26 @@
 // URL builders for every screen, so views never hard-code hash paths.
 //
-//   #/accounts                      accounts overview
-//   #/accounts/all                  all transactions
-//   #/accounts/a/<accountId>        one account's register
-//   #/budgets/<month>[/<cat>[/<sub>]]   budgets → category items (To Buy) → subcategory
-//   #/scheduled/<month>[/calendar|/todo[/<list>]]   bills & income, calendar, To Do
-//   #/reports[/<report>[/<month>]]  reports list → one report
+// The four tabs:
+//   #/accounts                      Accounts & Budgets
+//   #/daily/<month>                 Daily expenses
+//   #/plan/<month>                  Planned → Bills (monthly bills, subscriptions, salary)
+//   #/plan/<month>/buy[/<cat>[/<sub>]]   Planned → To Buy → category (its budget and items) → subcategory
+//   #/summary/<month>               Summary of the month
+// Other screens:
+//   #/accounts/a/<accountId>        one account's transactions
+//   #/todo/<month>[/<list>]         To Do lists
+//   #/reports[/<report>[/<month>]]  detailed reports
 //   #/settings
 const enc = encodeURIComponent;
 
 export const routes = {
   accounts: () => '#/accounts',
-  allTransactions: () => '#/accounts/all',
   account: (id) => `#/accounts/a/${enc(id)}`,
-  budgets: (month, cat = null, sub = null) => `#/budgets/${month}${cat ? `/${enc(cat)}` : ''}${sub ? `/${enc(sub)}` : ''}`,
-  scheduled: (month, view = 'list') => `#/scheduled/${month}${view === 'list' ? '' : `/${view}`}`,
-  todo: (month, list = null) => `#/scheduled/${month}/todo${list ? `/${enc(list)}` : ''}`,
+  daily: (month) => `#/daily/${month}`,
+  bills: (month) => `#/plan/${month}`,
+  budgets: (month, cat = null, sub = null) => `#/plan/${month}/buy${cat ? `/${enc(cat)}` : ''}${sub ? `/${enc(sub)}` : ''}`,
+  summary: (month) => `#/summary/${month}`,
+  todo: (month, list = null) => `#/todo/${month}${list ? `/${enc(list)}` : ''}`,
   reports: () => '#/reports',
   report: (key, month = null) => `#/reports/${key}${month ? `/${month}` : ''}`,
   settings: () => '#/settings',

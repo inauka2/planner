@@ -61,8 +61,6 @@ export function openAccountSheet({ account = null, monthId, kind = null, groupId
         <select class="select" name="kind">${Object.entries(ACCOUNT_KINDS).map(([k, v]) => `<option value="${k}" ${k === (a?.kind ?? kind ?? 'bank') ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
       <label class="field" data-limit ${(a?.kind ?? kind) === 'credit' ? '' : 'hidden'}><span class="label">Credit limit <span class="optional">optional</span></span>
         <input class="input" name="limit" inputmode="decimal" placeholder="0" value="${a?.creditLimit ? centsToInput(a.creditLimit) : ''}"></label>
-      <label class="field"><span class="label">Group</span>
-        <select class="select" name="group"><option value="">By type</option>${(state.settings.accountGroups || []).map((g) => `<option value="${esc(g.id)}" ${g.id === (a?.groupId ?? groupId) ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select></label>
       ${editable ? `<label class="field"><span class="label">${a ? 'Balance now' : 'Current balance'} <span class="optional">${a ? '' : 'optional'}</span></span>
         <input class="input input-amount" name="balance" inputmode="decimal" placeholder="0" value="${a && current ? centsToInput(current) : ''}"></label>` : ''}
       ${a ? switchRow('archived', !!a.archived, 'Hide account', 'Keeps its history, hides it from forms') : ''}
@@ -97,7 +95,7 @@ export function openAccountSheet({ account = null, monthId, kind = null, groupId
         creditLimit = p.cents;
       }
       const id = a?.id ?? uid();
-      const record = { ...(a || {}), id, name, kind: form.kind.value, currency, archived: form.archived?.checked || false, groupId: form.group.value || null, creditLimit };
+      const record = { ...(a || {}), id, name, kind: form.kind.value, currency, archived: form.archived?.checked || false, groupId: a?.groupId ?? groupId ?? null, creditLimit };
       await saveSettings({
         accounts: a ? state.settings.accounts.map((x) => (x.id === id ? record : x)) : [...state.settings.accounts, record],
       });
